@@ -823,6 +823,7 @@ type (
 		txFee       dcrutil.Amount
 		ticketFee   dcrutil.Amount
 		resp        chan purchaseTicketResponse
+		splitTx     uint32
 	}
 
 	consolidateResponse struct {
@@ -970,8 +971,7 @@ func (w *Wallet) CreateMultisigTx(account uint32, amount dcrutil.Amount,
 func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 	minConf int32, ticketAddr dcrutil.Address, account uint32,
 	numTickets int, poolAddress dcrutil.Address, poolFees float64,
-	expiry int32, txFee dcrutil.Amount, ticketFee dcrutil.Amount) ([]*chainhash.Hash,
-	error) {
+	expiry int32, txFee dcrutil.Amount, ticketFee dcrutil.Amount, splitTx uint32) ([]*chainhash.Hash, error) {
 
 	req := purchaseTicketRequest{
 		minBalance:  minBalance,
@@ -986,6 +986,7 @@ func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 		txFee:       txFee,
 		ticketFee:   ticketFee,
 		resp:        make(chan purchaseTicketResponse),
+		splitTx:     splitTx,
 	}
 	w.purchaseTicketRequests <- req
 	resp := <-req.resp
