@@ -1307,11 +1307,8 @@ func (s *walletServer) PurchaseTickets(ctx context.Context,
 
 	resp, err := s.wallet.PurchaseTickets(0, spendLimit, minConf,
 		ticketAddr, req.Account, numTickets, poolAddr, req.PoolFees,
-<<<<<<< HEAD
-		expiry, txFee, ticketFee, s.wallet.GetDcrTxClient())
-=======
-		expiry, txFee, ticketFee, req.SplitTx)
->>>>>>> SplitTx
+		expiry, txFee, ticketFee, req.SplitTx, s.wallet.GetDcrTxClient())
+
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"Unable to purchase tickets: %v", err)

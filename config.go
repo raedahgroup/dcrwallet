@@ -397,9 +397,9 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			DcrtxClientOptions: &dcrtxclient.Config{
 				Enable: defaultEnableDcrtxmatcher,
 			},
-		},
 
-		SplitTx: defaultSplitTx,
+			SplitTx: defaultSplitTx,
+		},
 
 		DcrtxClientOpts: dcrtxClientOptions{
 			Enable: defaultEnableDcrtxmatcher,

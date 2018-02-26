@@ -3,6 +3,7 @@ package dcrtxclient
 import (
 	"sync"
 
+	"github.com/decred/dcrwallet/dcrtxclient/service"
 	"google.golang.org/grpc"
 )
 
@@ -16,6 +17,8 @@ type (
 		sync.Mutex
 		cfg  *Config
 		conn *grpc.ClientConn
+
+		*service.TransactionService
 	}
 )
 
@@ -93,6 +96,8 @@ func (c *Client) registerServices() error {
 	if !c.isConnected() {
 		return ErrNotConnected
 	}
+
+	c.TransactionService = service.NewTransactionService(c.conn)
 
 	return nil
 }

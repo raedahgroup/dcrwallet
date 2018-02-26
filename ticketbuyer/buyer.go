@@ -79,11 +79,8 @@ type Config struct {
 	NoSpreadTicketPurchases   bool
 	VotingAddress             dcrutil.Address
 	TxFee                     int64
-<<<<<<< HEAD
 	DcrtxClient               *dcrtxclient.Config
-=======
 	SplitTx                   uint32
->>>>>>> SplitTx
 }
 
 // TicketPurchaser is the main handler for purchasing tickets. It decides
@@ -863,11 +860,8 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseStats, error) {
 		expiry,
 		t.wallet.RelayFee(),
 		t.wallet.TicketFeeIncrement(),
-<<<<<<< HEAD
-		t.wallet.GetDcrTxClient(),
-=======
 		t.cfg.SplitTx,
->>>>>>> SplitTx
+		t.wallet.GetDcrTxClient(),
 	)
 	for i := range hashes {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+

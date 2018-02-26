@@ -918,31 +918,131 @@ func makeTicket(params *chaincfg.Params, inputPool *extendedOutPoint,
 	return mtx, nil
 }
 
-func (w *Wallet) purchaseTicketsPrereq(req purchaseTicketRequest) (int32, dcrutil.Amount, error) {
+func (w *Wallet) purchaseTicketsPrereq(req purchaseTicketRequest) (NetworkBackend, dcrutil.Amount, error) {
+	n, err := w.NetworkBackend()
+	if err != nil {
+		return nil, dcrutil.Amount(0), err
+	}
 
+	// Ensure that the minuimum number of confirmations is greater than -1
+	if req.minConf < 0 {
+		return n, dcrutil.Amount(0), fmt.Errorf("Required number of confirmations should be greater than -1")
+	}
+
+	ticketPrice, err := n.StakeDifficulty(context.TODO())
+	if err != nil {
+		return n, dcrutil.Amount(0), err
+	}
+
+	return n, ticketPrice, nil
 }
+
 func (w *Wallet) joinSharedTransaction() {
 
 }
 
-func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
-	tipHeight, neededPerTicket, err := w.purchaseTicketsPrereq(req)
+func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest, numTickets int) ([]*chainhash.Hash, error) {
+	n, ticketPrice, err := w.purchaseTicketsPrereq(req)
+	if err != nil {
+		return nil, err
+	}
+
+	tipHeight, err := w.sanityCheckExpiry(req.expiry)
 	if err != nil {
 		return nil, err
 	}
 
 	addrFunc := w.fetchAddressFunc()
-	votingAddress, subsidyAddress, err := w.fetchAddresses(ticketAddress, req.account, addrFunc)
-	return nil, nil
+	votingAddress, subsidyAddress, err := w.fetchAddresses(req.ticketAddr, req.account, addrFunc)
+
+	neededPerTicket := req.minBalance + ticketPrice + EstMaxTicketFeeAmount
+
+	ticket := wire.NewMsgTx()
+	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
+	for i := 0; i < req.numTickets; i++ {
+		eligible, err := w.findEligibleOutputCredits(req.account, req.minConf, neededPerTicket, tipHeight)
+		if err != nil {
+			return ticketHashes, err
+		}
+
+		// If eligible utxos is equal to or greater than req.splitTx
+		// force a split tx
+		numEligible := len(eligible)
+		if numEligible >= int(req.splitTx) {
+			log.Debug("Found %v eligible inputs for sstx, too many. Will use a split transaction instead", numEligible)
+			tHash, err := w.forceSplit(req, 1)
+			if err != nil {
+				return ticketHashes, err
+			}
+
+			ticketHashes = append(ticketHashes, tHash)
+			continue
+		}
+
+		log.Debugf("Found %v eligible inputs for sstx, no split transaction needed", numEligible)
+		feeEst, err := w.estimateFee(eligible, votingAddress, ticketPrice)
+		if err != nil {
+			return ticketHashes, nil
+		}
+
+		forSigning, err := w.buildTicketTx(ticket, ticketPrice, votingAddress, subsidyAddress, eligible, req.minConf, feeEst)
+		if err != nil {
+			return ticketHashes, nil
+		}
+
+		if !stake.IsSStx(ticket) {
+			return ticketHashes, fmt.Errorf("Invalid sstx")
+		}
+
+		if req.expiry > 0 {
+			ticket.Expiry = uint32(req.expiry)
+		}
+
+		err = w.signAndValidateTicket(ticket, forSigning, nil)
+		if err != nil {
+			return ticketHashes, err
+		}
+
+		if req.dcrTxClient.Config().Enable {
+			tx, err := req.dcrTxClient.JoinTransaction(ticket, votingAddress)
+			if err != nil {
+				return ticketHashes, err
+			}
+
+			err = w.processTxRecordAndPublish(tx, n)
+			if err != nil {
+				return ticketHashes, err
+			}
+
+			ticketHash := tx.TxHash()
+			ticketHashes = append(ticketHashes, &ticketHash)
+			log.Infof("Successfully purchased and sent shared ticket %v", ticketHash)
+			continue
+		}
+
+		err = w.processTxRecordAndPublish(ticket, n)
+		if err != nil {
+			return ticketHashes, err
+		}
+
+		ticketHash := ticket.TxHash()
+		ticketHashes = append(ticketHashes, &ticketHash)
+		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
+		// Re-initialize the wire message for the next tx inputs/outputs
+		ticket = wire.NewMsgTx()
+
+	}
+
+	return ticketHashes, nil
 }
 
-func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	return nil, nil
 }
 
 func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
 	if req.splitTx == 1 {
-		return w.purchaseTickets(req)
+		return w.purchaseTicketsSplit(req, req.numTickets)
 	}
 	return w.purchaseTicketsSimple(req)
 }
@@ -966,41 +1066,6 @@ func (w *Wallet) processTxRecordAndPublish(tx *wire.MsgTx, n NetworkBackend) err
 	})
 
 	return err
-}
-
-// fetchAddresses returns a voting address. It checks if an address
-// was passed along with the request. if none was passed, it checks
-// for an address stored in configuration. If it finds none, it generates
-// an address from user wallet
-func (w *Wallet) fetchAddresses(ticketAddress dcrutil.Address,
-	account uint32, addrFunc func(persistReturnedChildFunc, uint32) (dcrutil.Address, error)) (dcrutil.Address, dcrutil.Address, error) {
-	addr := ticketAddress
-	var saddr dcrutil.Address
-	if addr == nil {
-		if w.ticketAddress != nil {
-			addr = w.ticketAddress
-		} else {
-			err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-				var err error
-				addr, err = addrFunc(w.persistReturnedChild(dbtx), account)
-				return err
-			})
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-	}
-
-	err := walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
-		var err error
-		saddr, err = addrFunc(w.persistReturnedChild(dbtx), account)
-		return err
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return addr, saddr, nil
 }
 
 // findEligibleOutputCredits abstracts the call to the findEligibleOutputsAmount func
@@ -1189,128 +1254,6 @@ func (w *Wallet) forceSplit(req purchaseTicketRequest, numTickets int) (*chainha
 		return ticketHash[0], nil
 	}
 	return nil, err
-}
-
-func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
-	n, err := w.NetworkBackend()
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure that the minimum number of confirmations is greater than -1
-	if req.minConf < 0 {
-		return nil, fmt.Errorf("Required number of confirmations should be greater than -1")
-	}
-
-	// Perform sanity check on enquiry
-	tipHeight, err := w.sanityCheckExpiry(req.expiry)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get Change address func
-	addrFunc := w.fetchAddressFunc()
-
-	// Try to get the pool address from the request. If none exists
-	// in the request, try to get the global pool address. Then do
-	// the same for pool fees, but check sanity too.
-	poolAddress := req.poolAddress
-	if poolAddress == nil {
-		poolAddress = w.PoolAddress()
-	}
-
-	poolFees := req.poolFees
-	if poolFees == 0.0 {
-		poolFees = w.PoolFees()
-	}
-	if poolAddress != nil && poolFees == 0.0 {
-		return nil, fmt.Errorf("pool address given, but pool fees not set")
-	}
-
-	ticketPrice, err := n.StakeDifficulty(context.TODO())
-	if err != nil {
-		return nil, err
-	}
-
-	neededPerTicket := req.minBalance + ticketPrice + EstMaxTicketFeeAmount
-	//amountNeeded := neededPerTicket
-
-	// Fetch votingAddress and subsidyAddress
-	votingAddress, subsidyAddress, err := w.fetchAddresses(req.ticketAddr, req.account, addrFunc)
-	if err != nil {
-		return nil, err
-	}
-
-	ticket := wire.NewMsgTx()
-	ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
-	for i := 0; i < req.numTickets; i++ {
-		eligible, err := w.findEligibleOutputCredits(req.account, req.minConf, neededPerTicket, tipHeight)
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		// If eligible utxos is equal to or greater than req.SplitTx
-		// Force a split tx
-		numEligible := len(eligible)
-		if numEligible >= int(req.splitTx) {
-			log.Debugf("Found %v eligible inputs for sstx, too many, will use a split transaction instead", numEligible)
-			tHash, err := w.forceSplit(req, 1)
-			if err != nil {
-				return ticketHashes, err
-			}
-			ticketHashes = append(ticketHashes, tHash)
-			continue
-		}
-
-		log.Debugf("Found %v eligible inputs for sstx, no split transaction needed", numEligible)
-		feeEst, err := w.estimateFee(eligible, votingAddress, ticketPrice)
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		// Build the transaction
-		forSigning, err := w.buildTicketTx(ticket, ticketPrice, votingAddress, subsidyAddress, eligible, req.minConf, feeEst)
-		if err != nil {
-			return ticketHashes, nil
-		}
-
-		if stake.IsSStx(ticket) {
-			return ticketHashes, err
-		}
-
-		// Set ticket expiry if expiry greater than zero
-		if req.expiry > 0 {
-			ticket.Expiry = uint32(req.expiry)
-		}
-
-		err = w.signAndValidateTicket(ticket, forSigning, nil)
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		err = w.processTxRecordAndPublish(ticket, n)
-		if err != nil {
-			return ticketHashes, err
-		}
-
-		ticketHash := ticket.TxHash()
-		ticketHashes = append(ticketHashes, &ticketHash)
-		log.Infof("Successfully sent SStx purchase transaction %v", ticketHash)
-		// Re-initialize the wire message for the next tx inputs/outputs
-		ticket = wire.NewMsgTx()
-	}
-
-	return ticketHashes, nil
-}
-
-// purchaseTickets calls the purchaseTicketsSplit or purchaseTicketsSimple functons
-// depending on the UseSplitTransaction config variable
-func (w *Wallet) purchaseTickets(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
-	if req.splitTx == 1 {
-		return w.purchaseTicketsSplit(req, req.numTickets)
-	}
-	return w.purchaseTicketsSimple(req)
-	//return w.purchaseTicketsSplit(req)
 }
 
 // txToSStx creates a raw SStx transaction sending the amounts for each
