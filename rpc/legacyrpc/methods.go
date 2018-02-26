@@ -2131,9 +2131,15 @@ func purchaseTicket(s *Server, icmd interface{}) (interface{}, error) {
 		}
 	}
 
+	splitTxn := uint32(1)
+	if cmd.SplitTx != nil {
+		splitTxn = *cmd.SplitTx
+	}
+
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
 		account, numTickets, poolAddr, poolFee, expiry, w.RelayFee(),
-		ticketFee, w.GetDcrTxClient())
+		ticketFee, splitTxn, w.GetDcrTxClient())
+
 	if err != nil {
 		return nil, err
 	}

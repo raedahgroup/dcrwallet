@@ -1307,7 +1307,11 @@ func (s *walletServer) PurchaseTickets(ctx context.Context,
 
 	resp, err := s.wallet.PurchaseTickets(0, spendLimit, minConf,
 		ticketAddr, req.Account, numTickets, poolAddr, req.PoolFees,
+<<<<<<< HEAD
 		expiry, txFee, ticketFee, s.wallet.GetDcrTxClient())
+=======
+		expiry, txFee, ticketFee, req.SplitTx)
+>>>>>>> SplitTx
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"Unable to purchase tickets: %v", err)
@@ -1748,6 +1752,17 @@ func StartTicketBuyerService(server *grpc.Server, loader *loader.Loader, tbCfg *
 
 func (t *ticketbuyerServer) checkReady() bool {
 	return atomic.LoadUint32(&t.ready) != 0
+}
+
+//SetNSplitTx sets the value of the splittx option
+func (t *ticketbuyerServer) SetSplitTx(ctx context.Context, req *pb.SetSplitTxRequest) (*pb.SetSplitTxResponse, error) {
+	pm, err := t.requirePurchaseManager()
+	if err != nil {
+		return nil, err
+	}
+
+	pm.Purchaser().SetSplitTx(req.SplitTx)
+	return &pb.SetSplitTxResponse{}, nil
 }
 
 // StartAutoBuyer starts the automatic ticket buyer.

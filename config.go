@@ -68,6 +68,7 @@ const (
 	defaultPriceTarget                              = 0
 	defaultBalanceToMaintainAbsolute                = 0
 	defaultBalanceToMaintainRelative                = 0.3
+	defaultSplitTx                                  = 1
 
 	defaultEnableDcrtxmatcher = false
 
@@ -185,6 +186,7 @@ type ticketBuyerOptions struct {
 	NoSpreadTicketPurchases   bool                 `long:"nospreadticketpurchases" description:"Do not spread ticket purchases evenly throughout the window"`
 	DontWaitForTickets        bool                 `long:"dontwaitfortickets" description:"Don't wait until your last round of tickets have entered the blockchain to attempt to purchase more"`
 	VotingAddress             *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
+	SplitTx                   uint32               `long:"splittx" description:"Use split transactions to limit the number of ticket purchase inputs"`
 
 	DcrtxClientOptions *dcrtxclient.Config
 
@@ -392,11 +394,12 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			BalanceToMaintainAbsolute: cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
 			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
 			VotingAddress:             cfgutil.NewAddressFlag(nil),
-
 			DcrtxClientOptions: &dcrtxclient.Config{
 				Enable: defaultEnableDcrtxmatcher,
 			},
 		},
+
+		SplitTx: defaultSplitTx,
 
 		DcrtxClientOpts: dcrtxClientOptions{
 			Enable: defaultEnableDcrtxmatcher,
@@ -629,8 +632,8 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 	}
 
 	// Sanity check ExpiryDelta
-	if cfg.TBOpts.ExpiryDelta <= 0 {
-		str := "%s: expirydelta must be greater then zero: %v"
+	if cfg.TBOpts.ExpiryDelta < 0 {
+		str := "%s: expirydelta cannot be negative: %v"
 		err := fmt.Errorf(str, funcName, cfg.TBOpts.ExpiryDelta)
 		fmt.Fprintln(os.Stderr, err)
 		return loadConfigError(err)
@@ -929,6 +932,19 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 		}
 	}
 
+	// AllowedSplitTxMaxValue sanity check
+	// While sstx transactions with many inputs can be created,
+	// the transactions end up being inefficient in size and fee
+	// because of the current sstx output ratio requirements.
+	// For this reason, split transactions will always be enforced for
+	// 2 or greater input.
+	if cfg.TBOpts.SplitTx < 1 || cfg.TBOpts.SplitTx > 2 {
+		str := "%s: splittx value must be 1 or 2"
+		err := fmt.Errorf(str, funcName)
+		fmt.Fprintln(os.Stderr, err)
+		return loadConfigError(err)
+	}
+
 	// Build ticketbuyer config
 	cfg.tbCfg = ticketbuyer.Config{
 		AccountName:               cfg.PurchaseAccount,
@@ -952,6 +968,7 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 		NoSpreadTicketPurchases:   cfg.TBOpts.NoSpreadTicketPurchases,
 		VotingAddress:             votingAddress,
 		TxFee:                     int64(cfg.RelayFee.Amount),
+		SplitTx:                   cfg.TBOpts.SplitTx,
 	}
 
 	// sanity check on dcrtxClientConfig
