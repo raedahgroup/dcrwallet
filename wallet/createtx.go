@@ -925,7 +925,18 @@ func (w *Wallet) purchaseTicketsPrereq(req purchaseTicketRequest) (int32, dcruti
 	return tipHeight, neededPerTicket, nil
 }
 
+func (w *Wallet) joinSharedTransaction() {
+
+}
+
 func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest) ([]*chainhash.Hash, error) {
+	tipHeight, neededPerTicket, err := w.purchaseTicketsPrereq(req)
+	if err != nil {
+		return nil, err
+	}
+
+	addrFunc := w.fetchAddressFunc()
+	votingAddress, subsidyAddress, err := w.fetchAddresses(ticketAddress, req.account, addrFunc)
 	return nil, nil
 }
 
