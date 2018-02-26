@@ -836,6 +836,7 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseStats, error) {
 		expiry,
 		t.wallet.RelayFee(),
 		t.wallet.TicketFeeIncrement(),
+		t.wallet.GetDcrTxClient(),
 	)
 	for i := range hashes {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+

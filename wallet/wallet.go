@@ -174,6 +174,10 @@ func (w *Wallet) SetDcrTxClient(dcrTxClient *dcrtxclient.Client) {
 	w.dcrTxClient = dcrTxClient
 }
 
+func (w *Wallet) GetDcrTxClient() *dcrtxclient.Client {
+	return w.dcrTxClient
+}
+
 // StakeDifficulty is used to get the next block's stake difficulty.
 func (w *Wallet) StakeDifficulty() (dcrutil.Amount, error) {
 	n, err := w.NetworkBackend()
@@ -831,6 +835,7 @@ type (
 		txFee       dcrutil.Amount
 		ticketFee   dcrutil.Amount
 		resp        chan purchaseTicketResponse
+		dcrTxClient *dcrtxclient.Client
 	}
 
 	consolidateResponse struct {
@@ -978,7 +983,7 @@ func (w *Wallet) CreateMultisigTx(account uint32, amount dcrutil.Amount,
 func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 	minConf int32, ticketAddr dcrutil.Address, account uint32,
 	numTickets int, poolAddress dcrutil.Address, poolFees float64,
-	expiry int32, txFee dcrutil.Amount, ticketFee dcrutil.Amount) ([]*chainhash.Hash,
+	expiry int32, txFee dcrutil.Amount, ticketFee dcrutil.Amount, dcrTxClient *dcrtxclient.Client) ([]*chainhash.Hash,
 	error) {
 
 	req := purchaseTicketRequest{
@@ -994,6 +999,7 @@ func (w *Wallet) PurchaseTickets(minBalance, spendLimit dcrutil.Amount,
 		txFee:       txFee,
 		ticketFee:   ticketFee,
 		resp:        make(chan purchaseTicketResponse),
+		dcrTxClient: dcrTxClient,
 	}
 	w.purchaseTicketRequests <- req
 	resp := <-req.resp

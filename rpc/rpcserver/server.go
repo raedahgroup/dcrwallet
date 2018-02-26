@@ -55,6 +55,8 @@ import (
 	"github.com/decred/dcrwallet/wallet/udb"
 	"github.com/decred/dcrwallet/walletdb"
 	"github.com/decred/dcrwallet/walletseed"
+
+	"github.com/decred/dcrwallet/dcrtxclient"
 )
 
 // Public API version constants
@@ -1305,7 +1307,7 @@ func (s *walletServer) PurchaseTickets(ctx context.Context,
 
 	resp, err := s.wallet.PurchaseTickets(0, spendLimit, minConf,
 		ticketAddr, req.Account, numTickets, poolAddr, req.PoolFees,
-		expiry, txFee, ticketFee)
+		expiry, txFee, ticketFee, s.wallet.GetDcrTxClient())
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"Unable to purchase tickets: %v", err)
@@ -1832,6 +1834,11 @@ func (t *ticketbuyerServer) StartAutoBuyer(ctx context.Context, req *pb.StartAut
 		NoSpreadTicketPurchases:   t.ticketbuyerCfg.NoSpreadTicketPurchases,
 		VotingAddress:             votingAddress,
 		TxFee:                     t.ticketbuyerCfg.TxFee,
+
+		DcrtxClient: &dcrtxclient.Config{
+			Address: t.ticketbuyerCfg.DcrtxClient.Address,
+			Enable:  t.ticketbuyerCfg.DcrtxClient.Enable,
+		},
 	}
 	err = t.loader.StartTicketPurchase(req.Passphrase, config)
 	if err == loader.ErrTicketBuyerStarted {

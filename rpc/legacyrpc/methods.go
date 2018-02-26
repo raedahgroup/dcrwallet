@@ -2133,7 +2133,7 @@ func purchaseTicket(s *Server, icmd interface{}) (interface{}, error) {
 
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
 		account, numTickets, poolAddr, poolFee, expiry, w.RelayFee(),
-		ticketFee)
+		ticketFee, w.GetDcrTxClient())
 	if err != nil {
 		return nil, err
 	}

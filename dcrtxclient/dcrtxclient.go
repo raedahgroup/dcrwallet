@@ -42,6 +42,10 @@ func NewClient(cfg *Config) (*Client, error) {
 	return client, nil
 }
 
+func (c *Client) Config() *Config {
+	return c.cfg
+}
+
 // connect attempts to connect to our dcrtxmatcher server
 func (c *Client) connect() (*grpc.ClientConn, error) {
 	c.Lock()
