@@ -17,6 +17,8 @@ import (
 	"github.com/decred/dcrwallet/wallet"
 	"github.com/decred/dcrwallet/walletdb"
 	_ "github.com/decred/dcrwallet/walletdb/bdb" // driver loaded during init
+
+	"github.com/decred/dcrwallet/dcrtxclient"
 )
 
 const (
@@ -45,6 +47,7 @@ type Loader struct {
 	addrIdxScanLen  int
 	allowHighFees   bool
 	relayFee        float64
+	dcrTxClient     *dcrtxclient.Client
 }
 
 // StakeOptions contains the various options necessary for stake mining.
@@ -60,7 +63,7 @@ type StakeOptions struct {
 
 // NewLoader constructs a Loader.
 func NewLoader(chainParams *chaincfg.Params, dbDirPath string, stakeOptions *StakeOptions, addrIdxScanLen int,
-	allowHighFees bool, relayFee float64) *Loader {
+	allowHighFees bool, relayFee float64, dcrTxClient *dcrtxclient.Client) *Loader {
 
 	return &Loader{
 		chainParams:    chainParams,
@@ -69,6 +72,7 @@ func NewLoader(chainParams *chaincfg.Params, dbDirPath string, stakeOptions *Sta
 		addrIdxScanLen: addrIdxScanLen,
 		allowHighFees:  allowHighFees,
 		relayFee:       relayFee,
+		dcrTxClient:    dcrTxClient,
 	}
 }
 
@@ -181,6 +185,10 @@ func (l *Loader) CreateNewWallet(pubPassphrase, privPassphrase, seed []byte) (w 
 	if err != nil {
 		return nil, err
 	}
+
+	// set wallet's dcrtxclient
+	w.SetDcrTxClient(l.dcrTxClient)
+
 	w.Start()
 
 	l.onLoaded(w, db)
@@ -236,6 +244,9 @@ func (l *Loader) OpenExistingWallet(pubPassphrase []byte) (w *wallet.Wallet, rer
 	if err != nil {
 		return nil, err
 	}
+
+	// set wallet's dcrtxclient
+	w.SetDcrTxClient(l.dcrTxClient)
 
 	w.Start()
 	l.onLoaded(w, db)

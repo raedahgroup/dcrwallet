@@ -25,6 +25,8 @@ import (
 	"github.com/decred/dcrwallet/wallet"
 	"github.com/decred/dcrwallet/wallet/txrules"
 	flags "github.com/jessevdk/go-flags"
+
+	"github.com/decred/dcrwallet/dcrtxclient"
 )
 
 const (
@@ -66,6 +68,8 @@ const (
 	defaultPriceTarget                              = 0
 	defaultBalanceToMaintainAbsolute                = 0
 	defaultBalanceToMaintainRelative                = 0.3
+
+	defaultEnableDcrtxmatcher = false
 
 	walletDbName = "wallet.db"
 )
@@ -155,6 +159,8 @@ type config struct {
 	TBOpts ticketBuyerOptions `group:"Ticket Buyer Options" namespace:"ticketbuyer"`
 	tbCfg  ticketbuyer.Config
 
+	DcrtxClientOpts dcrtxClientOptions `group:"Dcrtxmatcher Client" namespace:"dcrtxclient"`
+
 	// Deprecated options
 	DataDir       *cfgutil.ExplicitString `short:"b" long:"datadir" default-mask:"-" description:"DEPRECATED -- use appdata instead"`
 	PruneTickets  bool                    `long:"prunetickets" description:"DEPRECATED -- old tickets are always pruned"`
@@ -180,10 +186,17 @@ type ticketBuyerOptions struct {
 	DontWaitForTickets        bool                 `long:"dontwaitfortickets" description:"Don't wait until your last round of tickets have entered the blockchain to attempt to purchase more"`
 	VotingAddress             *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
 
+	DcrtxClientOptions *dcrtxclient.Config
+
 	// Deprecated options
 	MaxPriceScale         float64             `long:"maxpricescale" description:"DEPRECATED -- Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation, 0 to disable"`
 	PriceTarget           *cfgutil.AmountFlag `long:"pricetarget" description:"DEPRECATED -- A target to try to seek setting the stake price to rather than meeting the average price, 0 to disable"`
 	SpreadTicketPurchases bool                `long:"spreadticketpurchases" description:"DEPRECATED -- Spread ticket purchases evenly throughout the window"`
+}
+
+type dcrtxClientOptions struct {
+	Enable  bool   `long:"enable" description:"Enable wallet to join other participants in purchasing tickets in a single transaction"`
+	Address string `long:"address" description:"Dcrtxmatcher Server hostname"`
 }
 
 // cleanAndExpandPath expands environement variables and leading ~ in the
@@ -379,6 +392,14 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			BalanceToMaintainAbsolute: cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
 			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
 			VotingAddress:             cfgutil.NewAddressFlag(nil),
+
+			DcrtxClientOptions: &dcrtxclient.Config{
+				Enable: defaultEnableDcrtxmatcher,
+			},
+		},
+
+		DcrtxClientOpts: dcrtxClientOptions{
+			Enable: defaultEnableDcrtxmatcher,
 		},
 	}
 
@@ -932,6 +953,21 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 		VotingAddress:             votingAddress,
 		TxFee:                     int64(cfg.RelayFee.Amount),
 	}
+
+	// sanity check on dcrtxClientConfig
+	if cfg.DcrtxClientOpts.Enable && cfg.DcrtxClientOpts.Address == "" {
+		str := "Dcrtx server address cannot be empty"
+		err := fmt.Errorf(str, funcName)
+		return loadConfigError(err)
+	}
+
+	// dcrtxClientConfig
+	cfg.tbCfg.DcrtxClient = &dcrtxclient.Config{
+		Address: cfg.DcrtxClientOpts.Address,
+		Enable:  cfg.DcrtxClientOpts.Enable,
+	}
+
+	cfg.TBOpts.DcrtxClientOptions = cfg.tbCfg.DcrtxClient
 
 	// Make list of old versions of testnet directories.
 	var oldTestNets []string

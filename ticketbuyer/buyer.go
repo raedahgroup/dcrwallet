@@ -16,6 +16,8 @@ import (
 	"github.com/decred/dcrd/dcrutil"
 	dcrrpcclient "github.com/decred/dcrd/rpcclient"
 	"github.com/decred/dcrwallet/wallet"
+
+	"github.com/decred/dcrwallet/dcrtxclient"
 )
 
 var (
@@ -77,6 +79,7 @@ type Config struct {
 	NoSpreadTicketPurchases   bool
 	VotingAddress             dcrutil.Address
 	TxFee                     int64
+	DcrtxClient               *dcrtxclient.Config
 }
 
 // TicketPurchaser is the main handler for purchasing tickets. It decides

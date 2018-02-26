@@ -37,6 +37,8 @@ import (
 	"github.com/decred/dcrwallet/walletdb"
 	"github.com/jrick/bitset"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/decred/dcrwallet/dcrtxclient"
 )
 
 const (
@@ -144,6 +146,8 @@ type Wallet struct {
 	started bool
 	quit    chan struct{}
 	quitMu  sync.Mutex
+
+	dcrTxClient *dcrtxclient.Client
 }
 
 // Config represents the configuration options needed to initialize a wallet.
@@ -164,6 +168,10 @@ type Config struct {
 	AllowHighFees       bool
 	RelayFee            float64
 	Params              *chaincfg.Params
+}
+
+func (w *Wallet) SetDcrTxClient(dcrTxClient *dcrtxclient.Client) {
+	w.dcrTxClient = dcrTxClient
 }
 
 // StakeDifficulty is used to get the next block's stake difficulty.
