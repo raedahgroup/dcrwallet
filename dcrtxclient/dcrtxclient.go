@@ -40,7 +40,8 @@ func NewClient(cfg *Config) (*Client, error) {
 
 	client.conn = conn
 
-	// TODO register client services here
+	// register services
+	c.registerServices()
 
 	return client, nil
 }
