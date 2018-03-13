@@ -15,7 +15,7 @@
   branch = "SplitTx"
   name = "github.com/decred/dcrd"
   source = "github.com/shweini/dcrd"
-  
+
 
 [[constraint]]
   branch = "master"

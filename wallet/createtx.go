@@ -1000,7 +1000,7 @@ func (w *Wallet) purchaseTicketsSimple(req purchaseTicketRequest) ([]*chainhash.
 		}
 
 		if req.dcrTxClient.Config().Enable {
-			tx, err := req.dcrTxClient.JoinTransaction(ticket, votingAddress)
+			tx, err := req.dcrTxClient.JoinTransaction(ticket, votingAddress, ticketPrice)
 			if err != nil {
 				return ticketHashes, err
 			}
@@ -1266,7 +1266,7 @@ func (w *Wallet) purchaseTicketsSplit(req purchaseTicketRequest, numTickets int)
 		}
 
 		if req.dcrTxClient.Config().Enable {
-			tx, err := req.dcrTxClient.JoinTransaction(ticket, votingAddress)
+			tx, err := req.dcrTxClient.JoinTransaction(ticket, votingAddress, ticketPrice)
 			if err != nil {
 				return ticketHashes, err
 			}

@@ -22,9 +22,11 @@ func NewTransactionService(conn *grpc.ClientConn) *TransactionService {
 	}
 }
 
-func (t *TransactionService) JoinTransaction(tx *wire.MsgTx, voteAddress dcrutil.Address) (*wire.MsgTx, error) {
+func (t *TransactionService) JoinTransaction(tx *wire.MsgTx, voteAddress dcrutil.Address, ticketPrice dcrutil.Amount) (*wire.MsgTx, error) {
+	canContribute := ticketPrice.MulF64(0.5) // Half of ticket price
+
 	joinReq := &pb.FindMatchesRequest{
-		Amount: uint64(10),
+		Amount: uint64(canContribute),
 	}
 
 	findRes, err := t.client.FindMatches(context.Background(), joinReq)

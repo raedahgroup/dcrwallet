@@ -41,7 +41,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	client.conn = conn
 
 	// register services
-	c.registerServices()
+	client.registerServices()
 
 	return client, nil
 }
