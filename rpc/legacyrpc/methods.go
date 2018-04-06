@@ -2133,8 +2133,8 @@ func purchaseTicket(s *Server, icmd interface{}) (interface{}, error) {
 
 	//need to add SplitTx to struct PurchaseTicketCmd in decred/dcrd/dcrjson/dcrwalletextcmds.go
 	splitTxn := uint32(1)
-	if cmd.SplitTx != 1 {
-		splitTxn = cmd.SplitTx
+	if cmd.SplitTx != nil {
+		splitTxn = *cmd.SplitTx
 	}
 
 	hashes, err := w.PurchaseTickets(0, spendLimit, minConf, ticketAddr,
