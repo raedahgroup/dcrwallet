@@ -907,12 +907,14 @@ out:
 			txr.resp <- createMultisigTxResponse{tx, address, redeemScript, err}
 
 		case txr := <-w.purchaseTicketRequests:
+			fmt.Printf("[txCreator txr := <-w.purchaseTicketRequests] - Begin purchase %s  \r\n", "")
 			heldUnlock, err := w.holdUnlock()
 			if err != nil {
 				txr.resp <- purchaseTicketResponse{nil, err}
 				continue
 			}
 			data, err := w.purchaseTickets(txr)
+			fmt.Printf("[txCreator txr := <-w.purchaseTicketRequests] - End purchase %s \r\n", "")
 			heldUnlock.release()
 			txr.resp <- purchaseTicketResponse{data, err}
 

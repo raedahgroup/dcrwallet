@@ -133,18 +133,20 @@ func run(ctx context.Context) error {
 	if done(ctx) {
 		return ctx.Err()
 	}
-
+	//always set dcrTxClient config
 	var dcrTxClient *dcrtxclient.Client
-	if cfg.TBOpts.DcrtxClientOptions.Enable {
-		dcrTxClient, err := dcrtxclient.NewClient(cfg.TBOpts.DcrtxClientOptions)
+	if cfg.DcrtxClientConfig != nil {		
+		dcrTxClient, err = dcrtxclient.NewClient(cfg.DcrtxClientConfig)
 		if err != nil {
-			log.Errorf("Unable to connect to Dcrtxmatcher Server: %v", err)
+			log.Errorf("Unable to connect to Dcrtxmatcher Server: %v ", err)
 			return err
 		}
 
 		// Close client connection on shutdown. Returns an error if not already connected
 		// Safe to ignore error
-		defer dcrTxClient.Disconnect()
+		if cfg.DcrtxClientConfig.Enable {
+			defer dcrTxClient.Disconnect()
+		}
 	}
 
 	// Create the loader which is used to load and unload the wallet.  If
@@ -202,6 +204,8 @@ func run(ctx context.Context) error {
 
 			return err
 		}
+		//set dcrClient for wallet		
+		w.SetDcrTxClient(dcrTxClient)
 
 		if done(ctx) {
 			return ctx.Err()

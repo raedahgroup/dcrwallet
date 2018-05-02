@@ -27,21 +27,23 @@ func NewClient(cfg *Config) (*Client, error) {
 		cfg: cfg,
 	}
 
-	// connect to dcrtxmatcher server
-	conn, err := client.connect()
-	if err != nil {
-		return nil, err
+	if cfg.Enable {
+		// connect to dcrtxmatcher server if enable
+		conn, err := client.connect()
+		if err != nil {
+			return nil, err
+		}
+
+		// somehow conn object is still nil
+		if conn == nil {
+			return nil, ErrCannotConnect
+		}
+
+		client.conn = conn
+
+		// register services
+		client.registerServices()
 	}
-
-	// somehow conn object is still nil
-	if conn == nil {
-		return nil, ErrCannotConnect
-	}
-
-	client.conn = conn
-
-	// register services
-	client.registerServices()
 
 	return client, nil
 }

@@ -160,7 +160,8 @@ type config struct {
 	TBOpts ticketBuyerOptions `group:"Ticket Buyer Options" namespace:"ticketbuyer"`
 	tbCfg  ticketbuyer.Config
 
-	DcrtxClientOpts dcrtxClientOptions `group:"Dcrtxmatcher Client" namespace:"dcrtxclient"`
+	DcrtxClientOpts   dcrtxClientOptions `group:"Dcrtxmatcher Client" namespace:"dcrtxclient"`
+	DcrtxClientConfig *dcrtxclient.Config
 
 	// Deprecated options
 	DataDir       *cfgutil.ExplicitString `short:"b" long:"datadir" default-mask:"-" description:"DEPRECATED -- use appdata instead"`
@@ -188,8 +189,7 @@ type ticketBuyerOptions struct {
 	VotingAddress             *cfgutil.AddressFlag `long:"votingaddress" description:"Purchase tickets with voting rights assigned to this address"`
 	SplitTx                   uint32               `long:"splittx" description:"Use split transactions to limit the number of ticket purchase inputs"`
 
-	DcrtxClientOptions *dcrtxclient.Config
-
+	
 	// Deprecated options
 	MaxPriceScale         float64             `long:"maxpricescale" description:"DEPRECATED -- Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation, 0 to disable"`
 	PriceTarget           *cfgutil.AmountFlag `long:"pricetarget" description:"DEPRECATED -- A target to try to seek setting the stake price to rather than meeting the average price, 0 to disable"`
@@ -394,10 +394,7 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 			BalanceToMaintainAbsolute: cfgutil.NewAmountFlag(defaultBalanceToMaintainAbsolute),
 			BalanceToMaintainRelative: defaultBalanceToMaintainRelative,
 			VotingAddress:             cfgutil.NewAddressFlag(nil),
-			DcrtxClientOptions: &dcrtxclient.Config{
-				Enable: defaultEnableDcrtxmatcher,
-			},
-
+			
 			SplitTx: defaultSplitTx,
 		},
 
@@ -979,13 +976,12 @@ func loadConfig(ctx context.Context) (*config, []string, error) {
 	}
 
 	// dcrtxClientConfig
-	cfg.tbCfg.DcrtxClient = &dcrtxclient.Config{
+	cfg.DcrtxClientConfig = &dcrtxclient.Config{
 		Address: cfg.DcrtxClientOpts.Address,
 		Enable:  cfg.DcrtxClientOpts.Enable,
 	}
 
-	cfg.TBOpts.DcrtxClientOptions = cfg.tbCfg.DcrtxClient
-
+	
 	// Make list of old versions of testnet directories.
 	var oldTestNets []string
 	oldTestNets = append(oldTestNets, filepath.Join(cfg.AppDataDir.Value, "testnet"))
