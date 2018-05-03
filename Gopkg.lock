@@ -3,6 +3,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/aead/siphash"
+  packages = ["."]
+  revision = "e404fcfc888570cadd1610538e2dbc89f66af814"
+
+[[projects]]
+  branch = "master"
   name = "github.com/agl/ed25519"
   packages = [
     ".",
@@ -53,7 +59,7 @@
   revision = "b3520e187fa8ebe65eb74245408cf4b83e6a65d3"
 
 [[projects]]
-  branch = "SplitTx"
+  branch = "master"
   name = "github.com/decred/dcrd"
   packages = [
     "blockchain",
@@ -74,6 +80,8 @@
     "dcrec/secp256k1/schnorr",
     "dcrjson",
     "dcrutil",
+    "gcs",
+    "gcs/blockcf",
     "hdkeychain",
     "mempool",
     "mining",
@@ -81,11 +89,10 @@
     "txscript",
     "wire"
   ]
-  revision = "5704e206192429ac14d092ade49c0440ec3f45a9"
-  source = "github.com/shweini/dcrd"
+  revision = "2e329c185a95718019b21b5fd4578149c0cd1a67"
+  source = "github.com/huyntsgs/dcrd"
 
 [[projects]]
-  branch = "master"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -94,7 +101,8 @@
     "ptypes/duration",
     "ptypes/timestamp"
   ]
-  revision = "130e6b02ab059e7b717a096f397c5b60111cae74"
+  revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
+  version = "v1.1.0"
 
 [[projects]]
   name = "github.com/jessevdk/go-flags"
@@ -119,6 +127,13 @@
   packages = ["difflib"]
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/raedahgroup/dcrtxmatcher"
+  packages = ["pkg/api/matcherrpc"]
+  revision = "dd8ab3ff1306f6d1bc653bf99c8058e069b51403"
+  source = "github.com/huyntsgs/dcrtxmatcher"
 
 [[projects]]
   name = "github.com/stretchr/testify"
@@ -200,9 +215,14 @@
   name = "google.golang.org/grpc"
   packages = [
     ".",
+    "balancer",
+    "balancer/base",
+    "balancer/roundrobin",
     "codes",
     "connectivity",
     "credentials",
+    "encoding",
+    "encoding/proto",
     "grpclb/grpc_lb_v1/messages",
     "grpclog",
     "internal",
@@ -210,17 +230,20 @@
     "metadata",
     "naming",
     "peer",
+    "resolver",
+    "resolver/dns",
+    "resolver/passthrough",
     "stats",
     "status",
     "tap",
     "transport"
   ]
-  revision = "f92cdcd7dcdc69e81b2d7b338479a19a8723cfa3"
-  version = "v1.6.0"
+  revision = "d11072e7ca9811b1100b80ca0269ac831f06d024"
+  version = "v1.11.3"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "532177a61c724c0dc2cd394143c5dc4780fea86de17cdfbdd06c615c757d6d8d"
+  inputs-digest = "8da5ae77ef3f76753a7b33e89bdd184252c412aa3001581f70d30cf1d26381a5"
   solver-name = "gps-cdcl"
   solver-version = 1
