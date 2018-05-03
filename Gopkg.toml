@@ -13,8 +13,8 @@
 
 [[constraint]]
   branch = "dcrtxmatcher"
-  name = "github.com/decred/dcrd"
-  source = "github.com/huyntsgs/dcrd"
+  name = "github.com/decred/decred/dcrwallet"
+  source = "github.com/huyntsgs/decred/dcrwallet"
 
 
 [[constraint]]
