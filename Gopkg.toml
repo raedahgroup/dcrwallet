@@ -12,9 +12,9 @@
   name = "github.com/btcsuite/websocket"
 
 [[constraint]]
-  branch = "SplitTx"
+  branch = "dcrtxmatcher"
   name = "github.com/decred/dcrd"
-  source = "github.com/shweini/dcrd"
+  source = "github.com/huyntsgs/dcrd"
 
 
 [[constraint]]
