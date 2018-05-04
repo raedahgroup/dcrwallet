@@ -33,10 +33,12 @@ func (t *TransactionService) JoinSplitTx(tx *wire.MsgTx, voteAddress dcrutil.Add
 	}
 
 	findRes, err := t.client.FindMatches(context.Background(), joinReq)
-	fmt.Println("FindMatches findRes \r\n", findRes.SessionId)
 	if err != nil {
+		fmt.Println("FindMatches error", err)
 		return nil, 0, nil, err
 	}
+	fmt.Println("FindMatches findRes \r\n", findRes.SessionId)
+
 
 	buffTx := bytes.NewBuffer(nil)
 	buffTx.Grow(tx.SerializeSize())
