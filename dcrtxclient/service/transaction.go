@@ -6,7 +6,7 @@ import (
 
 	"github.com/decred/dcrd/dcrutil"
 	"github.com/decred/dcrd/wire"
-	pb "github.com/raedahgroup/dcrtxmatcher/pkg/api/matcherrpc"
+	pb "github.com/raedahgroup/dcrtxmatcher/api/matcherrpc"
 	"google.golang.org/grpc"
 
 	//"log"
@@ -38,7 +38,6 @@ func (t *TransactionService) JoinSplitTx(tx *wire.MsgTx, voteAddress dcrutil.Add
 		return nil, 0, nil, err
 	}
 	fmt.Println("FindMatches findRes \r\n", findRes.SessionId)
-
 
 	buffTx := bytes.NewBuffer(nil)
 	buffTx.Grow(tx.SerializeSize())
