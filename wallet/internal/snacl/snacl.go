@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"io"
+	"runtime"
 	"runtime/debug"
 
 	"github.com/decred/dcrwallet/errors"
@@ -107,8 +108,15 @@ type SecretKey struct {
 
 // deriveKey fills out the Key field.
 func (sk *SecretKey) deriveKey(op errors.Op, password *[]byte) error {
+	var N int
+	if runtime.GOOS == "darwin" {
+		N = DefaultN
+	} else {
+		N = sk.Parameters.N
+	}
+
 	key, err := scrypt.Key(*password, sk.Parameters.Salt[:],
-		sk.Parameters.N,
+		N,
 		sk.Parameters.R,
 		sk.Parameters.P,
 		len(sk.Key))
