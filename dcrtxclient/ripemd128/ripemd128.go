@@ -1,11 +1,10 @@
 // Copyright 2010 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-// use to create 128 bits hash
 
+//Golang only has 256 bits hash of ripemd.
+//We have modified to create 128 bits hash
 package ripemd128
-
-//"hash"
 
 // The size of the checksum in bytes.
 const Size = 16

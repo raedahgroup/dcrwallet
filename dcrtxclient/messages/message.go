@@ -33,6 +33,14 @@ const (
 	S_TX_PUBLISH_RESULT = 108
 )
 
+const (
+	//size of dc-net exponential vector element
+	ExpRandSize = 12
+	//size of dc-net xor vector element, the same with lengh of pkscript
+	PkScriptSize     = 25
+	PkScriptHashSize = 16
+)
+
 type (
 	Message struct {
 		MsgType uint32
@@ -40,6 +48,7 @@ type (
 	}
 )
 
+//Construct the message from message type and slice of bytes
 func NewMessage(msgtype uint32, data []byte) *Message {
 	return &Message{
 		MsgType: msgtype,
@@ -53,7 +62,7 @@ func BytesToUint(data []byte) (ret uint32) {
 	return
 }
 
-//Parse data received (from client or server) to Message
+//Unmarshal data received (from client or server) to Message
 func ParseMessage(msgData []byte) (*Message, error) {
 	if len(msgData) < 4 {
 		return nil, errors.New("message data is less than 4 bytes")
@@ -74,6 +83,7 @@ func ParseMessage(msgData []byte) (*Message, error) {
 
 }
 
+//Marshal message data to byte slice
 func (msg *Message) ToBytes() []byte {
 	msgData := IntToBytes(msg.MsgType)
 	msgData = append(msgData, msg.Data...)

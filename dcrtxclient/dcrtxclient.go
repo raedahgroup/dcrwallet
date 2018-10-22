@@ -21,7 +21,7 @@ type (
 
 	Client struct {
 		sync.Mutex
-		cfg  *Config
+		Cfg  *Config
 		conn *grpc.ClientConn
 		*service.TransactionService
 		IsShutdown bool
@@ -30,13 +30,13 @@ type (
 
 func SetConfig(cfg *Config) *Client {
 	client := &Client{
-		cfg: cfg,
+		Cfg: cfg,
 	}
 	return client
 }
 
 func (c *Client) StartSession() (*Client, error) {
-	if c.cfg.Enable {
+	if c.Cfg.Enable {
 
 		// connect to dcrtxmatcher server if enable
 		conn, err := c.Connect()
@@ -58,46 +58,12 @@ func (c *Client) StartSession() (*Client, error) {
 	return c, nil
 }
 
-func NewClient(cfg *Config) (*Client, error) {
-	client := &Client{
-		cfg: cfg,
-	}
-
-	if cfg.Enable {
-		// connect to dcrtxmatcher server if enable
-		conn, err := client.Connect()
-		if err != nil {
-			return nil, err
-		}
-
-		// somehow conn object is still nil
-		if conn == nil {
-			return nil, ErrCannotConnect
-		}
-
-		client.conn = conn
-
-		// register services
-		client.registerServices()
-	}
-
-	return client, nil
-}
-
-func (c *Client) Config() *Config {
-	return c.cfg
-}
-
 // connect attempts to connect to our dcrtxmatcher server
 func (c *Client) Connect() (*grpc.ClientConn, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	//	if c.isConnected() {
-	//		return nil, ErrAlreadyConnected
-	//	}
-
-	conn, err := grpc.Dial(c.cfg.Address, grpc.WithInsecure())
+	conn, err := grpc.Dial(c.Cfg.Address, grpc.WithInsecure())
 	if err != nil {
 		log.Warn("Unable to connect to dcrtxmatcher server")
 		return nil, err

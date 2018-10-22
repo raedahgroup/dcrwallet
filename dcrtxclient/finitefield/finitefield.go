@@ -13,6 +13,8 @@ type (
 //Prime of finite field with field size 128 bit (1<<127 - 1)
 var Prime = Uint128{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
 
+//Function return finite field from uint128 type
+//Function terminates when value of uint128 is greater than Prime
 func NewFF(n Uint128) Field {
 	if Prime.Compare(n) == 0 {
 		return Field{Uint128{0, 0}}
@@ -35,6 +37,8 @@ func (ff Field) Sub(ff2 Field) Field {
 	return ff.Add(ff2.Neg())
 }
 
+//Perform multiplation over finite field
+//and assign result for first receiver
 func (ff *Field) MulAssign(ff2 Field) {
 
 	sh := ff.N.H
@@ -83,6 +87,8 @@ func (ff *Field) MulAssign(ff2 Field) {
 	ff.N = ret
 }
 
+//Perform multiplation over finite field
+//Function return result to new finite field
 func (ff Field) Mul(ff2 Field) Field {
 
 	sh := ff.N.H
@@ -104,7 +110,6 @@ func (ff Field) Mul(ff2 Field) Field {
 	// (64 bits * 64 bits) + 128 bits = 129 bits
 	//overflowing_add Returns (a + b) mod 2^N, where N is the width of T in bits.
 	//let (rl, carry) = (sl as u128 * ol as u128).overflowing_add((ml as u128) << 64);
-
 	r1 := Uint128{0, sl}
 	r2 := Uint128{0, ol}
 
@@ -131,6 +136,7 @@ func (ff Field) Mul(ff2 Field) Field {
 	return NewFF(ret)
 }
 
+//Calculate exponential of finite field
 func (ff Field) Exp(e uint64) Field {
 	ret := &Field{ff.N}
 	if e == uint64(1) {
@@ -144,6 +150,7 @@ func (ff Field) Exp(e uint64) Field {
 	return *ret
 }
 
+//Get hexa string representation of finite field vallue
 func (ff Field) HexStr() string {
 	n := &ff.N
 	return n.HexStr()

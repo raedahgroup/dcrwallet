@@ -45,8 +45,6 @@ func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte) {
 		return nil, nil
 	}
 
-	fmt.Printf("RngBytes %x\n", ret)
-
 	return r, ret
 
 }
