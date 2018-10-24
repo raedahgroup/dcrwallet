@@ -13,8 +13,8 @@ type (
 // Prime of finite field with field size 128 bit (1<<127 - 1)
 var Prime = Uint128{0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF}
 
-// Function return finite field from uint128 type.
-// Function terminates when value of uint128 is greater than Prime
+// NewFF returns finite field from uint128 type.
+// Terminates when value of uint128 is greater than Prime
 func NewFF(n Uint128) Field {
 	if Prime.Compare(n) == 0 {
 		return Field{Uint128{0, 0}}
@@ -37,7 +37,7 @@ func (ff Field) Sub(ff2 Field) Field {
 	return ff.Add(ff2.Neg())
 }
 
-// Perform multiplation over finite field
+// MulAssign performs multiplation over finite field
 // and assign result for first receiver
 func (ff *Field) MulAssign(ff2 Field) {
 
@@ -68,7 +68,7 @@ func (ff *Field) MulAssign(ff2 Field) {
 
 	rl := Uint128{}
 	rl.L = r3.L + r31.L
-	//check if overflow Lo
+	// Check if overflow Lo
 	var carry uint64 = 0
 	if rl.L < r3.L {
 		carry = 1
@@ -87,8 +87,8 @@ func (ff *Field) MulAssign(ff2 Field) {
 	ff.N = ret
 }
 
-// Perform multiplation over finite field
-// Function return result to new finite field
+// Mul performs multiplation over finite field
+// and returns result to new finite field
 func (ff Field) Mul(ff2 Field) Field {
 
 	sh := ff.N.H
@@ -118,7 +118,7 @@ func (ff Field) Mul(ff2 Field) Field {
 
 	rl := Uint128{}
 	rl.L = r3.L + r31.L
-	//check if overflow Lo
+	// Check if overflow Lo
 	var carry uint64 = 0
 	if rl.L < r3.L {
 		carry = 1

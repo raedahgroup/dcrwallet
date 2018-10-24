@@ -1402,11 +1402,17 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					// Generate random byte with shared key and random size is 12.
 					// Choose 12 because with bigger random size will cause the power sum
 					// with padding random bytes overflow max value of prime finite field (1<<127)
-					dcexpRng := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
+					dcexpRng, err := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
+					if err != nil {
+						return nil, err
+					}
 					dcexpRng = append([]byte{0, 0, 0, 0}, dcexpRng...)
 
 					// For random byte of Xor vector, we get the same size of pkscript is 25 bytes
-					dcXorRng := chacharng.RandBytes(sharedKey, messages.PkScriptSize)
+					dcXorRng, err := chacharng.RandBytes(sharedKey, messages.PkScriptSize)
+					if err != nil {
+						return nil, err
+					}
 					peers = append(peers, PeerData{Id: peer.PeerId, Pk: peer.Pk, NumMsg: peer.NumMsg, DcExp: dcexpRng,
 						DcXor: dcXorRng})
 

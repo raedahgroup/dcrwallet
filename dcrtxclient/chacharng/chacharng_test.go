@@ -11,7 +11,11 @@ import (
 func TestRandomGenerate(t *testing.T) {
 	seed := []byte("01234567890123456789012345678901")
 
-	rnd := RandBytes(seed, 20)
+	rnd, err := RandBytes(seed, 20)
+
+	if err != nil {
+		t.Fail()
+	}
 
 	if rnd == nil {
 		t.Fail()
@@ -19,7 +23,10 @@ func TestRandomGenerate(t *testing.T) {
 
 	seed1 := []byte("01234567890123456789012345678911")
 
-	rnd1 := RandBytes(seed1, 20)
+	rnd1, err := RandBytes(seed1, 20)
+	if err != nil {
+		t.Fail()
+	}
 
 	if rnd1 == nil {
 		t.Fail()
@@ -33,9 +40,9 @@ func TestRandomGenerate(t *testing.T) {
 func TestRandBytesAfterReseed(t *testing.T) {
 	seed := []byte("01234567890123456789012345678901")
 
-	r := NewRandReader(seed)
+	r, err := NewRandReader(seed)
 
-	if r == nil {
+	if err != nil {
 		t.Fail()
 	}
 
@@ -50,9 +57,9 @@ func TestRandBytesAfterReseed(t *testing.T) {
 	fmt.Printf("b %x\n", b)
 	fmt.Printf("b1 %x\n", b1)
 
-	r1 := NewRandReader(seed)
+	r1, err := NewRandReader(seed)
 
-	if r1 == nil {
+	if err != nil {
 		t.Fail()
 	}
 
@@ -69,7 +76,11 @@ func TestRandBytesAfterReseed(t *testing.T) {
 func TestInvalidSeedSize(t *testing.T) {
 	seed := []byte("abcdefd")
 
-	rnd := RandBytes(seed, 20)
+	rnd, err := RandBytes(seed, 20)
+
+	if err != nil {
+		t.Fail()
+	}
 
 	if rnd != nil {
 		t.Fail()

@@ -41,7 +41,7 @@ func (c *Client) StartSession() error {
 		}
 
 		c.conn = conn
-		err := c.registerServices()
+		err = c.registerServices()
 		if err != nil {
 			return err
 		}
