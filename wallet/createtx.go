@@ -1756,7 +1756,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		if txFeeIncrement == 0 {
 			txFeeIncrement = w.RelayFee()
 		}
-		//need to do join split transaction from this with txdcrmatcher server
+		// Need to do join split transaction from this with dcrtxmatcher server
 		splitTx, changeSourceFuncs, err := w.txToOutputsSplitTx(splitOuts, req.account, req.minConf,
 			n, false, txFeeIncrement)
 		if err != nil {
@@ -1772,8 +1772,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			localOutputIndex = append(localOutputIndex, int32(i))
 		}
 
-		//connect to dcrtxmatcher server
-		_, err = req.dcrTxClient.StartSession()
+		// Connect to dcrtxmatcher server
+		err = req.dcrTxClient.StartSession()
 		if err != nil {
 			if !req.dcrTxClient.IsShutdown {
 				log.Infof("Error %v in communication with dcrtxmatcher server", err)

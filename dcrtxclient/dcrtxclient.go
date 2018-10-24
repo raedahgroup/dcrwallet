@@ -1,7 +1,6 @@
 package dcrtxclient
 
 import (
-	//"fmt"
 	"sync"
 
 	"github.com/decred/dcrwallet/dcrtxclient/service"
@@ -28,44 +27,41 @@ type (
 	}
 )
 
-func SetConfig(cfg *Config) *Client {
-	client := &Client{
-		Cfg: cfg,
-	}
-	return client
-}
-
-func (c *Client) StartSession() (*Client, error) {
+// startSession establishes a connection to the transaction matching server if
+// the client's configuration allows it.
+func (c *Client) StartSession() error {
 	if c.Cfg.Enable {
-
-		// connect to dcrtxmatcher server if enable
 		conn, err := c.Connect()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		// somehow conn object is still nil
 		if conn == nil {
-			return nil, ErrCannotConnect
+			return ErrCannotConnect
 		}
 
 		c.conn = conn
-
-		// register services
-		c.registerServices()
+		err := c.registerServices()
+		if err != nil {
+			return err
+		}
 	}
 
-	return c, nil
+	if !c.Cfg.Enable {
+		log.Info("Session aborted, the client is currently disabled.")
+	}
+
+	return nil
 }
 
-// connect attempts to connect to our dcrtxmatcher server
+// Connect attempts to connect to dcrtxmatcher server
 func (c *Client) Connect() (*grpc.ClientConn, error) {
 	c.Lock()
 	defer c.Unlock()
 
 	conn, err := grpc.Dial(c.Cfg.Address, grpc.WithInsecure())
 	if err != nil {
-		log.Warn("Unable to connect to dcrtxmatcher server")
+		log.Warn("Unable to connect to dcrtxmatcher server.")
 		return nil, err
 	}
 
@@ -94,6 +90,7 @@ func (c *Client) isConnected() bool {
 	return false
 }
 
+// registerServices registers service api function with dcrtxmatcher server.
 func (c *Client) registerServices() error {
 	if !c.isConnected() {
 		return ErrNotConnected
