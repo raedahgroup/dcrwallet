@@ -106,6 +106,7 @@ func (d0 *Digest) Sum(in []byte) []byte {
 	return append(in, digest[:]...)
 }
 
+// Sum127 calculate hash 128bit and reset first 4 bits
 func (d0 *Digest) Sum127(in []byte) []byte {
 	// Make a copy of d0 so that caller can keep writing and summing.
 	d := *d0

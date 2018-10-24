@@ -1175,9 +1175,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		}
 	}
 
-	//Separate purchase ticket code to a func for using in many part of code
-	//The first one is used to purchase when got joined tx from dcrtxmatcher server
-	//The secode is used when dcrtxmatcher is not available, and purchase will work as usually
+	// Separate purchase ticket code to a func for using in many part of code
+	// The first one is used to purchase when got joined tx from dcrtxmatcher server
+	// The secode is used when dcrtxmatcher is not available, and purchase will work as usually
 	purchaseFn := func(tx *wire.MsgTx, numberTickets int, outputIds []int32) ([]*chainhash.Hash, error) {
 
 		log.Info("OutputIndex will be used for purchase", outputIds)
@@ -1224,7 +1224,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 			err = walletdb.View(w.db, func(tx walletdb.ReadTx) error {
 				ns := tx.ReadBucket(waddrmgrNamespaceKey)
-				//signMsgTx set signaturescript to txin
+				// signMsgTx set signaturescript to txin
 				return w.signP2PKHMsgTx(ticket, forSigning, ns)
 			})
 			if err != nil {
@@ -1244,7 +1244,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		return ticketHashes, nil
 	}
 
-	//check dcrtxclient option to ensure current code also works with dcrtxclient enable option is disable in config file
+	// We purchase ticket by coinsuff++ method.
+	// If dcrTxClient is not enable, we purchase by coinjoin method.
+	// If server is not available, purchase ticket locally.
 	if req.dcrTxClient.Cfg.Enable {
 		var splitOuts []*wire.TxOut
 
@@ -1277,14 +1279,14 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			return nil, errors.E(op, errors.Bug, errors.Errorf("split address %v", ""))
 		}
 
-		//remove all txout to perform dicemix output address, keep only change output
+		// Remove all txout to perform dicemix output address, keep only change output
 		if len(splitTx.Tx.TxOut) > 1 {
 			splitTx.Tx.TxOut = []*wire.TxOut{splitTx.Tx.TxOut[len(splitTx.Tx.TxOut)-1]}
 		} else {
 			splitTx.Tx.TxOut = []*wire.TxOut{}
 		}
 
-		// build outputs index in case communicate with server fails
+		// Build outputs index in case communicate with server fails
 		localOutputIndex := make([]int32, 0)
 		for i := 0; i < req.numTickets; i++ {
 			localOutputIndex = append(localOutputIndex, int32(i))
@@ -1293,19 +1295,19 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		peers := make([]PeerData, 0)
 		var PeerId, SessionId uint32
 
-		//Connect to dcrtxmatcher server via websocket.
-		//In case dcrtxmacher is not available, we will purchase locally as usual
+		// Connect to dcrtxmatcher server via websocket.
+		// In case dcrtxmacher is not available, we will purchase locally as usual
 		dialer := websocket.Dialer{}
 		ws, _, err := dialer.Dial("ws://"+req.dcrTxClient.Cfg.Address+"/ws", http.Header{})
 		if err != nil {
 			log.Errorf("Error connecting %v", err)
-			//Will purchase locally
+			// Will purchase locally
 
 		}
 		log.Info("Connected to dcrtxmatcher server for joining transaction!")
 		defer ws.Close()
 
-		//Generate public/private keypair using Elliptic Curve Diffe Huffman
+		// Generate public/private keypair using Elliptic Curve Diffe Huffman
 		ecp256 := ecdh.NewEllipticECDH(elliptic.P256())
 		vk, pk, err := ecp256.GenerateKey(rand.Reader)
 		if err != nil {
@@ -1321,13 +1323,13 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		var allMsgHashes []field.Uint128
 		myMsgsHash := make([][]byte, 0)
 
-		//Will need to record the input and output index of peer in joined transaction
-		//Know input index to sign peer's transaction input
-		//Know output index to purchase ticket
+		// Will need to record the input and output index of peer in joined transaction.
+		// Know input index to sign peer's transaction input.
+		// Know output index to purchase ticket.
 		var outputIndex, inputIndex []int32
 		var joinTx wire.MsgTx
 
-		//Read websocket continuously for incoming message
+		// Read websocket continuously for incoming message
 		for {
 
 			_, msg, err := ws.ReadMessage()
@@ -1342,11 +1344,11 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				return nil, err
 			}
 
-			//We need to check the type of the message and having proper process
+			// We need to check the type of the message and having proper process
 			switch message.MsgType {
 			case messages.S_JOIN_RESPONSE:
-				//Peer receives this message when server has received all join transaction request from all peers.
-				//Server will generate session id and peer id and send back data to every peers
+				// Peer receives this message when server has received all join transaction request from all peers.
+				// Server will generate session id and peer id and send back data to every peers
 				joinRes := &pb.CoinJoinRes{}
 				err := proto.Unmarshal(message.Data, joinRes)
 				if err != nil {
@@ -1357,7 +1359,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				PeerId = joinRes.PeerId
 				SessionId = joinRes.SessionId
 
-				//send key exchange cmd
+				// Send key exchange cmd
 				keyex := &pb.KeyExchangeReq{
 					SessionId: SessionId,
 					PeerId:    PeerId,
@@ -1378,7 +1380,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 
 			case messages.S_KEY_EXCHANGE:
-				//After server has received the public key of all peers, each peer received  public keys of all peers
+				// After server has received the public key of all peers, each peer received  public keys of all peers
 				keyex := &pb.KeyExchangeRes{}
 				err := proto.Unmarshal(message.Data, keyex)
 				if err != nil {
@@ -1388,27 +1390,27 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				log.Debug("Generate sharedkey with each peer")
 				log.Debug("Uses shared key as seed to generate padding bytes for dc-net exponential and dc-net xor")
 
-				//We will create peer random bytes for dc-net exponential and dc-net xor
+				// We will create peer random bytes for dc-net exponential and dc-net xor
 				for _, peer := range keyex.Peers {
 					peerPk, _ := ecp256.Unmarshal(peer.Pk)
-					//Will generate shared key with other peer from private key and other peer public key
+					// Will generate shared key with other peer from private key and other peer public key
 					sharedKey, err := ecp256.GenerateSharedSecret(vk, peerPk)
 					if err != nil {
 						log.Errorf("error GenerateSharedSecret: %v", err)
 						return nil, err
 					}
-					//Generate random byte with shared key and random size is 12.
-					//Choose 12 because with bigger random size will cause the power sum
-					//with padding random bytes overflow max value of prime finite field (1<<127)
+					// Generate random byte with shared key and random size is 12.
+					// Choose 12 because with bigger random size will cause the power sum
+					// with padding random bytes overflow max value of prime finite field (1<<127)
 					dcexpRng := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
 					dcexpRng = append([]byte{0, 0, 0, 0}, dcexpRng...)
 
-					//For random byte of Xor vector, we get the same size of pkscript is 25 bytes
+					// For random byte of Xor vector, we get the same size of pkscript is 25 bytes
 					dcXorRng := chacharng.RandBytes(sharedKey, messages.PkScriptSize)
 					peers = append(peers, PeerData{Id: peer.PeerId, Pk: peer.Pk, NumMsg: peer.NumMsg, DcExp: dcexpRng,
 						DcXor: dcXorRng})
 
-					//Calculate total number of messsages from all peers
+					// Calculate total number of messsages from all peers
 					numMsg += peer.NumMsg
 				}
 
@@ -1418,8 +1420,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				//Create dc-net exponential vector with size is total number message of all peers in join session
-				//We choose 127 instead 128 because as the same reason choosing 12 byte of random byte size of dc-net exponential
+				// Create dc-net exponential vector with size is total number message of all peers in join session
+				// We choose 127 instead 128 because as the same reason choosing 12 byte of random byte size of dc-net exponential
 				myDcexp := make([]field.Field, numMsg)
 				for _, msg := range pkScripts {
 					md := ripemd128.New()
@@ -1434,16 +1436,16 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 					ff := field.NewFF(field.FromBytes(pkscripthash))
 
-					//With N message we will create vector with size N,
-					//create power of each message hash and sum all messages with the same power i
+					// With N message we will create vector with size N,
+					// create power of each message hash and sum all messages with the same power i
 					for i := 0; i < int(numMsg); i++ {
 						myDcexp[i] = myDcexp[i].Add(ff.Exp(uint64(i + 1)))
 					}
 				}
 
-				//padding with random number generated with secret key seed
+				// Padding with random number generated with secret key seed
 				for j := 0; j < int(numMsg); j++ {
-					//padding with other peers
+					// Padding with other peers
 					for _, p := range peers {
 						if PeerId > p.Id {
 							myDcexp[j] = myDcexp[j].Add(p.GetDcexpField())
@@ -1453,8 +1455,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				//Submit dc-net exponential vector of peer to server
-				//the server will combine the vectors of all peers to resolve polynomial
+				// Submit dc-net exponential vector of peer to server
+				// the server will combine the vectors of all peers to resolve polynomial
 				dcExpVector := &pb.DcExpVector{PeerId: PeerId, Len: uint32(numMsg)}
 				vector := make([]byte, 0)
 				for i := 0; i < int(numMsg); i++ {
@@ -1485,9 +1487,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return nil, err
 				}
 			case messages.S_DC_EXP_VECTOR:
-				//After server received all peers exponential vector and resolved polynomial,
-				//server will sent back all resolved pkscripst hash.
-				//Each peer has to sort all pkscripts hash and sort to find their index of pkscripts hash in sorted list
+				// After server received all peers exponential vector and resolved polynomial,
+				// server will sent back all resolved pkscripst hash.
+				// Each peer has to sort all pkscripts hash and sort to find their index of pkscripts hash in sorted list
 				log.Debug("Received all hash of pkscript from peers")
 				allMsgs := &pb.AllMessages{}
 
@@ -1505,12 +1507,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					allMsgHashes[i] = field.FromBytes(allMsgBytes[i])
 				}
 
-				//Sort all messages and find pkscripts hash slot index
+				// Sort all messages and find pkscripts hash slot index
 				sort.Slice(allMsgHashes, func(i, j int) bool {
 					return allMsgHashes[i].Compare(allMsgHashes[j]) < 0
 				})
 
-				//Find my messages index in messages hash
+				// Find my messages index in messages hash
 				slotReserveds := make([]int, len(myMsgsHash))
 				for j := 0; j < len(myMsgsHash); j++ {
 					for i := 0; i < int(allMsgs.Len); i++ {
@@ -1521,13 +1523,13 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				log.Debugf("Find my pkscripts from all hashed messages returned from server. My slot reserved index %v", slotReserveds)
 
-				//After found slot index of pkscripts hash
-				//Peer will create dc-net xor vector
-				//Base on equation: (Pkscript ^ P ^ P1 ^ P2...) ^ (P ^ P1 ^ P2...) = Pkscript
-				//Each peer will send Pkscript ^ P ^ P1 ^ P2... bytes to server
-				//Server combine all dc-net xor vector and will have Pkscript ^ P ^ P1 ^ P2... ^ (P ^ P1 ^ P2...) = Pkscript
-				//But server could not know which Pkscript belongs to any peer because only peer know it's slot index
-				//And each peer only knows it's Pkscript itself
+				// After found slot index of pkscripts hash
+				// Peer will create dc-net xor vector
+				// Base on equation: (Pkscript ^ P ^ P1 ^ P2...) ^ (P ^ P1 ^ P2...) = Pkscript
+				// Each peer will send Pkscript ^ P ^ P1 ^ P2... bytes to server
+				// Server combine all dc-net xor vector and will have Pkscript ^ P ^ P1 ^ P2... ^ (P ^ P1 ^ P2...) = Pkscript
+				// But server could not know which Pkscript belongs to any peer because only peer know it's slot index
+				// And each peer only knows it's Pkscript itself
 				myDcXor := make([][]byte, numMsg)
 				for i := 0; i < int(req.numTickets); i++ {
 					myDcXor[slotReserveds[i]] = pkScripts[i]
@@ -1560,7 +1562,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					log.Errorf("error marshal dcexpvector: %v", err)
 					return nil, err
 				}
-				//Submit dc-net xor vector to server
+				// Submit dc-net xor vector to server
 				message := messages.NewMessage(messages.C_DC_XOR_VECTOR, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
 					log.Errorf("write error ", err)
@@ -1569,10 +1571,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				log.Debug("Sent dc-net xor vector to server")
 
 			case messages.S_DC_XOR_VECTOR:
-				//Will check whether there is malicious peers
-				//If all pkscripts sent from server not contain at least one peer's pkscript
-				//We need to find the malicious peer to remove
-				//And we trust on server terminating malicious peers
+				// Will check whether there is malicious peers
+				// If all pkscripts sent from server not contain at least one peer's pkscript
+				// We need to find the malicious peer to remove
+				// And we trust on server terminating malicious peers
 				dcxorRet := &pb.DcXorVectorResult{}
 				err := proto.Unmarshal(message.Data, dcxorRet)
 				if err != nil {
@@ -1602,9 +1604,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				log.Info("Sent transaction inputs and change amount")
 			case messages.S_JOINED_TX:
-				//With joined transaction returns from server
-				//The key is finding correct peer's transaction input and output index
-				//and record for later use
+				// With joined transaction returns from server
+				// The key is finding correct peer's transaction input and output index
+				// and record for later use
 				joinTxData := &pb.JoinTx{}
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
@@ -1634,7 +1636,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				//Sign the transaction with peer's transaction inputs only, not others
+				// Sign the transaction with peer's transaction inputs only, not others
 				err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
 					addrmgrNs := dbtx.ReadBucket(waddrmgrNamespaceKey)
 					secrets := &secretSource{Manager: w.Manager, addrmgrNs: addrmgrNs}
@@ -1648,7 +1650,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return nil, err
 				}
 
-				//Encode signed transaction and submit to server
+				// Encode signed transaction and submit to server
 				signedTx := &pb.JoinTx{PeerId: PeerId}
 				buff := bytes.NewBuffer(nil)
 				buff.Grow(joinTx.SerializeSize())
@@ -1673,8 +1675,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				log.Debug("Sent signed joined tx")
 
 			case messages.S_TX_SIGN:
-				//With peer is selected to publish transaction
-				//then will be received this message data
+				// With peer is selected to publish transaction
+				// then will be received this message data
 				joinTxData := &pb.JoinTx{}
 
 				err := proto.Unmarshal(message.Data, joinTxData)
@@ -1700,7 +1702,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				log.Info("Published and sent the transaction to server", joinTx.TxHash().String())
 
-				//Encode the published transaction and send to server
+				// Encode the published transaction and send to server
 				var buffTx1 = bytes.NewBuffer(nil)
 				buffTx1.Grow(joinTx.SerializeSize())
 				err = joinTx.BtcEncode(buffTx1, 0)
@@ -1716,7 +1718,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return nil, err
 				}
 			case messages.S_TX_PUBLISH_RESULT:
-				//Will use transaction to pruchase ticket with peer's output index
+				// Will use transaction to pruchase ticket with peer's output index
 				if len(message.Data) == 1 {
 					return nil, errors.New("error when publish joined transaction")
 				}
@@ -1766,7 +1768,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		// Purchase tickets individually.
 		ticketHashes := make([]*chainhash.Hash, 0, req.numTickets)
 
-		// build outputs index in case communicate with server fails
+		// Build outputs index in case communicate with server fails
 		localOutputIndex := make([]int32, 0)
 		for i := 0; i < req.numTickets; i++ {
 			localOutputIndex = append(localOutputIndex, int32(i))

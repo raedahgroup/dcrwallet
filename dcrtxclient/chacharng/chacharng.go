@@ -7,8 +7,8 @@ import (
 	"github.com/tmthrgd/go-rand"
 )
 
-//func returns random [rndsize]byte slice with provided seed
-//based on chacha20. The seed size must be 32.
+// func returns random [rndsize]byte slice with provided seed
+// based on chacha20. The seed size must be 32.
 func RandBytes(seed []byte, rndsize int) []byte {
 	r, err := rand.New(seed[:])
 	if err != nil {
@@ -28,8 +28,8 @@ func RandBytes(seed []byte, rndsize int) []byte {
 
 }
 
-//NewReaderBytes generates random [rndsize]byte slice with provided seed and reader for next random
-//based on chacha20. The seed size must be 32.
+// NewReaderBytes generates random [rndsize]byte slice with provided seed and reader for next random
+// based on chacha20. The seed size must be 32.
 func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte) {
 	r := NewRandReader(seed[:])
 	if r != nil {
@@ -49,7 +49,7 @@ func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte) {
 
 }
 
-//get new reader from seed.
+//NewRandReader gets new reader from seed.
 func NewRandReader(seed []byte) io.Reader {
 	r, err := rand.New(seed[:])
 	if err != nil {

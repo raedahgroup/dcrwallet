@@ -1,8 +1,8 @@
 package messages
 
-//Message parser for marchal and unmarshal from/to protobuf message
-//MessageType is id of message client/server send in each round
-//Data is data of the round that is protobuf messsage
+// Message parser for marchal and unmarshal from/to protobuf message
+// MessageType is id of message client/server send in each round
+// Data is data of the round that is protobuf messsage
 import (
 	"bytes"
 	"encoding/binary"
@@ -34,9 +34,9 @@ const (
 )
 
 const (
-	//size of dc-net exponential vector element
+	// Size of dc-net exponential vector element
 	ExpRandSize = 12
-	//size of dc-net xor vector element, the same with lengh of pkscript
+	// Size of dc-net xor vector element, the same with lengh of pkscript
 	PkScriptSize     = 25
 	PkScriptHashSize = 16
 )
@@ -48,7 +48,7 @@ type (
 	}
 )
 
-//Construct the message from message type and slice of bytes
+// NewMessage constructs the message from message type and slice of bytes
 func NewMessage(msgtype uint32, data []byte) *Message {
 	return &Message{
 		MsgType: msgtype,
@@ -62,7 +62,7 @@ func BytesToUint(data []byte) (ret uint32) {
 	return
 }
 
-//Unmarshal data received (from client or server) to Message
+// ParseMessage unmarshals data received (from client or server) to Message
 func ParseMessage(msgData []byte) (*Message, error) {
 	if len(msgData) < 4 {
 		return nil, errors.New("message data is less than 4 bytes")
@@ -83,13 +83,14 @@ func ParseMessage(msgData []byte) (*Message, error) {
 
 }
 
-//Marshal message data to byte slice
+// ToBytes marshals message data to byte slice
 func (msg *Message) ToBytes() []byte {
 	msgData := IntToBytes(msg.MsgType)
 	msgData = append(msgData, msg.Data...)
 
 	return msgData
 }
+
 func IntToBytes(val uint32) []byte {
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.BigEndian, uint32(val))
