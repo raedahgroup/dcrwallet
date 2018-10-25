@@ -22,7 +22,7 @@ type (
 		sync.Mutex
 		Cfg  *Config
 		conn *grpc.ClientConn
-		*service.TransactionService
+		*service.TxService
 		IsShutdown bool
 	}
 )
@@ -96,7 +96,7 @@ func (c *Client) registerServices() error {
 		return ErrNotConnected
 	}
 
-	c.TransactionService = service.NewTransactionService(c.conn)
+	c.TxService = service.NewTxService(c.conn)
 
 	return nil
 }

@@ -1782,7 +1782,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		defer func() {
 			req.dcrTxClient.Disconnect()
 		}()
-.
+
 		// Call join split tx request with timeout.
 		tx, sesID, inputIds, outputIds, joinId, err := req.dcrTxClient.JoinSplitTx(splitTx.Tx, req.dcrTxClient.Cfg.Timeout)
 		log.Debugf("JoinSessionId %v", joinId)
