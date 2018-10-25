@@ -34,9 +34,9 @@ const (
 )
 
 const (
-	// Size of dc-net exponential vector element
+	// Size of dc-net exponential vector element.
 	ExpRandSize = 12
-	// Size of dc-net xor vector element, the same with lengh of pkscript
+	// Size of dc-net xor vector element, the same with lengh of pkscript.
 	PkScriptSize     = 25
 	PkScriptHashSize = 16
 )
@@ -48,7 +48,7 @@ type (
 	}
 )
 
-// NewMessage constructs the message from message type and slice of bytes
+// NewMessage constructs the message from message type and bytes data.
 func NewMessage(msgtype uint32, data []byte) *Message {
 	return &Message{
 		MsgType: msgtype,
@@ -56,13 +56,14 @@ func NewMessage(msgtype uint32, data []byte) *Message {
 	}
 }
 
+// BytesToUint converts slice of bytes to uint32.
 func BytesToUint(data []byte) (ret uint32) {
 	buf := bytes.NewBuffer(data)
 	binary.Read(buf, binary.BigEndian, &ret)
 	return
 }
 
-// ParseMessage unmarshals data received (from client or server) to Message
+// ParseMessage unmarshals data received (from client or server) to Message.
 func ParseMessage(msgData []byte) (*Message, error) {
 	if len(msgData) < 4 {
 		return nil, errors.New("message data is less than 4 bytes")
@@ -83,7 +84,7 @@ func ParseMessage(msgData []byte) (*Message, error) {
 
 }
 
-// ToBytes marshals message data to byte slice
+// ToBytes marshals message data to bytes.
 func (msg *Message) ToBytes() []byte {
 	msgData := IntToBytes(msg.MsgType)
 	msgData = append(msgData, msg.Data...)
@@ -91,6 +92,7 @@ func (msg *Message) ToBytes() []byte {
 	return msgData
 }
 
+// IntToBytes converts uint32 to bytes.
 func IntToBytes(val uint32) []byte {
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.BigEndian, uint32(val))

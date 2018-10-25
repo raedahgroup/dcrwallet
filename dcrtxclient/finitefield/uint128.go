@@ -16,10 +16,8 @@ type (
 	}
 )
 
-// Function comparing two uint128 number
-// 0: equal
-// 1: greater
-// -1: less
+// Compare does comparing two uint128 numbers.
+// Returns 0: equal, 1: greater, -1: less.
 func (op Uint128) Compare(op2 Uint128) int {
 	if op.H > op.H {
 		return 1
@@ -36,18 +34,21 @@ func (op Uint128) Compare(op2 Uint128) int {
 	return 0
 }
 
-// Reduce on one uint128, used in finite field operation
+// Reduce performs reduce on one uint128.
+// Function is used in finite field operation.
 func (u Uint128) Reduce() Uint128 {
 	return And128(u, Prime).Add(u.ShiftR(127))
 }
 
-// Reduce on two uint128, used in finite field operation
+// Reduce2 performs reduce on two uint128.
+// Function is used in finite field operation
 func Reduce2(h, l Uint128) Uint128 {
 	shift := Or128(h.ShiftL(1), l.ShiftR(127))
 	return And128(l, Prime).Add(shift)
 }
 
-// Perform multiplation on two uint128 number
+// Mul performs multiplation on two uint128 numbers
+// and return to new uint128
 func Mul(n, m Uint128) Uint128 {
 	// Split values into four 32-bit parts
 	top := []uint64{n.H >> 32, n.H & 0xFFFFFFFF, n.L >> 32, n.L & 0xFFFFFFFF}
@@ -97,7 +98,8 @@ func Mul(n, m Uint128) Uint128 {
 	return Uint128{(first32 << 32) | second32, (third32 << 32) | fourth32}
 }
 
-// Perform division on two uint128, return remaider and mode
+// Divmod performs division on two uint128s.
+// Returns remaider and mode
 func Divmod(x, y Uint128) (Uint128, Uint128) {
 
 	if y.Compare(Uint128{0, 0}) == 0 {
@@ -129,7 +131,8 @@ func Divmod(x, y Uint128) (Uint128, Uint128) {
 	return d, v
 }
 
-// Addition on two unint128 numbers
+// Add performs addition on two unint128 numbers.
+// and returns new uint128.
 func (u Uint128) Add(o Uint128) Uint128 {
 	carry := u.L
 
@@ -141,7 +144,8 @@ func (u Uint128) Add(o Uint128) Uint128 {
 	return ret
 }
 
-// Sub function returns a new Uint128 decremented by n.
+// Sub performs subtraction on uint128 and uint64.
+// and returns a new uint128.
 func (u Uint128) Sub(n uint64) Uint128 {
 	lo := u.L - n
 	hi := u.H
@@ -151,7 +155,8 @@ func (u Uint128) Sub(n uint64) Uint128 {
 	return Uint128{hi, lo}
 }
 
-// Sub performs subtraction on two uint128 numbers
+// Sub performs subtraction on two uint128 numbers.
+// and returns new uint128.
 func Sub(N, M Uint128) Uint128 {
 	A := Uint128{0, N.L - M.L}
 	var C uint64 = (((A.L & M.L) & 1) + (M.L >> 1) + (A.L >> 1)) >> 63
@@ -159,7 +164,7 @@ func Sub(N, M Uint128) Uint128 {
 	return A
 }
 
-// ShiftL performs shift left on uint128 number
+// ShiftL performs shift left operation on uint128 number.
 func (N Uint128) ShiftL(shift uint64) Uint128 {
 
 	if shift >= 128 {
@@ -177,7 +182,7 @@ func (N Uint128) ShiftL(shift uint64) Uint128 {
 	}
 }
 
-// ShiftR performs shift right on uint128 number
+// ShiftR performs shift right operation on uint128 number.
 func (N Uint128) ShiftR(shift uint64) Uint128 {
 
 	if shift >= 128 {
@@ -195,19 +200,19 @@ func (N Uint128) ShiftR(shift uint64) Uint128 {
 	}
 }
 
-// Or128 performs or operator on two uint128 numbers
+// Or128 performs or operation on two uint128 numbers.
 func Or128(N1, N2 Uint128) Uint128 {
 	return Uint128{N1.H | N2.H, N1.L | N2.L}
 }
 
-// And128 performs and operator on two uint128 numbers
+// And128 performs and operation on two uint128 numbers.
 func And128(N1, N2 Uint128) (A Uint128) {
 	A.H = N1.H & N2.H
 	A.L = N1.L & N2.L
 	return A
 }
 
-// Xor128 performs xor operator on two uint128 numbers
+// Xor128 performs xor operator on two uint128 numbers.
 func Xor128(N1, N2 Uint128) Uint128 {
 	var A Uint128
 	A.H = N1.H ^ N2.H
@@ -215,7 +220,7 @@ func Xor128(N1, N2 Uint128) Uint128 {
 	return A
 }
 
-// NewFromString parses uint128 from string and return uint128 value
+// NewFromString parses uint128 from string and return uint128 value.
 func NewFromString(s string) (u *Uint128, err error) {
 
 	if len(s) > 32 {
@@ -232,7 +237,7 @@ func NewFromString(s string) (u *Uint128, err error) {
 	return
 }
 
-// HexStr gets hexa representation in string of uint128
+// HexStr gets hexa representation in string of uint128.
 func (u *Uint128) HexStr() string {
 	if u.H == 0 {
 		return fmt.Sprintf("%x", u.L)
@@ -240,7 +245,7 @@ func (u *Uint128) HexStr() string {
 	return fmt.Sprintf("%x%016x", u.H, u.L)
 }
 
-// GetBytes returns a big-endian byte representation.
+// GetBytes gets a big-endian byte representation.
 func (u Uint128) GetBytes() []byte {
 	buf := make([]byte, 16)
 	binary.BigEndian.PutUint64(buf[:8], u.H)
@@ -248,7 +253,7 @@ func (u Uint128) GetBytes() []byte {
 	return buf
 }
 
-// String returns a hexadecimal string representation.
+// String gets a hexadecimal string representation.
 func (u Uint128) String() string {
 	return hex.EncodeToString(u.GetBytes())
 }

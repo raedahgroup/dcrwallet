@@ -50,7 +50,7 @@ func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte, error) {
 
 }
 
-//NewRandReader gets new reader from seed.
+// NewRandReader creates a new rand reader from the provided seed.
 func NewRandReader(seed []byte) (io.Reader, error) {
 	r, err := rand.New(seed[:])
 	if err != nil {
