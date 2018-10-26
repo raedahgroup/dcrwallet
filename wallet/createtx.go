@@ -1240,8 +1240,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			}
 			pkScripts[i], err = txscript.PayToAddrScript(splitTxAddr)
 			if err != nil {
-				log.Errorf("cannot create txout script: %s", err)
-				return nil, err
+				return nil, errors.E(op, err)
 			}
 
 			splitOuts = append(splitOuts, wire.NewTxOut(int64(neededPerTicket), pkScripts[i]))
@@ -1280,7 +1279,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		dialer := websocket.Dialer{}
 		ws, _, err := dialer.Dial("ws://"+req.dcrTxClient.Cfg.Address+"/ws", http.Header{})
 		if err != nil {
-			log.Errorf("Error connecting %v", err)
+			log.Errorf("Connecting Error: %v", err)
 			// Will purchase locally
 
 		}
@@ -1291,8 +1290,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		ecp256 := ecdh.NewEllipticECDH(elliptic.P256())
 		vk, pk, err := ecp256.GenerateKey(rand.Reader)
 		if err != nil {
-			log.Errorf("error ecdh GenerateKey: %v", err)
-			return nil, err
+			return nil, errors.E(op, err)
 		}
 
 		pkbytes := ecp256.Marshal(pk)
@@ -1314,14 +1312,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 			_, msg, err := ws.ReadMessage()
 			if err != nil {
-				log.Errorf("ReadMessage error %v\n", err)
-				return nil, err
+				return nil, errors.E(op, err)
 			}
 
 			message, err := messages.ParseMessage(msg)
 			if err != nil {
-				log.Errorf("error ParseMessage: %v\n", err)
-				return nil, err
+				return nil, errors.E(op, err)
 			}
 
 			// We need to check the type of the message and having proper process
@@ -1332,8 +1328,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				joinRes := &pb.CoinJoinRes{}
 				err := proto.Unmarshal(message.Data, joinRes)
 				if err != nil {
-					log.Errorf("error Unmarshal joinRes: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				PeerId = joinRes.PeerId
@@ -1349,14 +1344,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(keyex)
 				if err != nil {
-					log.Errorf("error Unmarshal joinRes: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				message := messages.NewMessage(messages.C_KEY_EXCHANGE, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("error WriteMessage: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 			case messages.S_KEY_EXCHANGE:
@@ -1364,8 +1357,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				keyex := &pb.KeyExchangeRes{}
 				err := proto.Unmarshal(message.Data, keyex)
 				if err != nil {
-					log.Errorf("error Unmarshal joinRes: %v\n", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Debug("Generate sharedkey with each peer")
 				log.Debug("Uses shared key as seed to generate padding bytes for dc-net exponential and dc-net xor")
@@ -1384,7 +1376,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					// with padding random bytes overflow max value of prime finite field (1<<127)
 					dcexpRng, err := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
 					if err != nil {
-						return nil, err
+						return nil, errors.E(op, err)
 					}
 					dcexpRng = append([]byte{0, 0, 0, 0}, dcexpRng...)
 
@@ -1413,8 +1405,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					md := ripemd128.New()
 					_, err = md.Write(msg)
 					if err != nil {
-						log.Errorf("error rand.Read %x", err)
-						return nil, err
+						return nil, errors.E(op, err)
 					}
 
 					pkscripthash := md.Sum127(nil)
@@ -1454,7 +1445,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				md := ripemd128.New()
 				_, err = md.Write(vector)
 				if err != nil {
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				commit := md.Sum(nil)
@@ -1463,14 +1454,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(dcExpVector)
 				if err != nil {
-					log.Errorf("error marshal dcexpvector: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				message := messages.NewMessage(messages.C_DC_EXP_VECTOR, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("write error ", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 			case messages.S_DC_EXP_VECTOR:
 				// After server received all peers exponential vector and resolved polynomial,
@@ -1481,8 +1470,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				err := proto.Unmarshal(message.Data, allMsgs)
 				if err != nil {
-					fmt.Errorf("err Unmarshal S_DC_EXP_VECTOR %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				allMsgBytes = make([][]byte, allMsgs.Len)
@@ -1527,8 +1515,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					for i := 0; i < int(numMsg); i++ {
 						myDcXor[i], err = util.XorBytes(myDcXor[i], peer.DcXor)
 						if err != nil {
-							log.Error("error XorBytes", err)
-							return nil, err
+							return nil, errors.E(op, err)
 						}
 					}
 				}
@@ -1545,14 +1532,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				dcXor := &pb.DcXorVector{PeerId: PeerId, Vector: xorData, Len: numMsg}
 				data, err := proto.Marshal(dcXor)
 				if err != nil {
-					log.Errorf("error marshal dcexpvector: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				// Submit dc-net xor vector to server
 				message := messages.NewMessage(messages.C_DC_XOR_VECTOR, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("write error ", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Debug("Sent dc-net xor vector to server")
 
@@ -1564,29 +1549,25 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				dcxorRet := &pb.DcXorVectorResult{}
 				err := proto.Unmarshal(message.Data, dcxorRet)
 				if err != nil {
-					log.Errorf("error proto.Unmarshal DCXor: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				buffTx := bytes.NewBuffer(nil)
 				buffTx.Grow(splitTx.Tx.SerializeSize())
 				err = splitTx.Tx.BtcEncode(buffTx, 0)
 				if err != nil {
-					log.Errorf("error BtcEncode %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Info("Will submit tx inputs and change amount to server")
 				txInputs := &pb.TxInputs{PeerId: PeerId, TicketPrice: int64(neededPerTicket), Txins: buffTx.Bytes()}
 				txInsData, err := proto.Marshal(txInputs)
 				if err != nil {
-					log.Errorf("error proto.Marshal txInputs: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				message := messages.NewMessage(messages.C_TX_INPUTS, txInsData)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("error WriteMessage: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Info("Sent transaction inputs and change amount")
 			case messages.S_JOINED_TX:
@@ -1596,8 +1577,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				joinTxData := &pb.JoinTx{}
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
-					log.Errorf("err Unmarshal S_JOINED_TX %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Info("Received joined tx. Will find my txin, txout index from joined tx and sign")
 				var joinTx wire.MsgTx
@@ -1642,21 +1622,18 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buff.Grow(joinTx.SerializeSize())
 				err = joinTx.BtcEncode(buff, 0)
 				if err != nil {
-					log.Errorf("error BtcEncode %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				signedTx.Tx = buff.Bytes()
 				signedTxData, err := proto.Marshal(signedTx)
 				if err != nil {
-					log.Errorf("error BtcEncode %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				message := messages.NewMessage(messages.C_TX_SIGN, signedTxData)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("error WriteMessage: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Debug("Sent signed joined tx")
 
@@ -1667,24 +1644,20 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
-					log.Errorf("err Unmarshal S_JOINED_TX %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				buffTx := bytes.NewReader(joinTxData.Tx)
 				err = joinTx.BtcDecode(buffTx, 0)
 				if err != nil {
-					log.Errorf("err BtcDecode %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				log.Info("Will publish the transaction")
 				err = w.publishTx(&joinTx, changeSourceFuncs, w.networkBackend)
 				var msg *messages.Message
 				if err != nil {
-					log.Errorf("Error when publish join splittx %v", err)
-					msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, []byte{0x0})
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Info("Published and sent the transaction to server", joinTx.TxHash().String())
 
@@ -1693,15 +1666,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buffTx1.Grow(joinTx.SerializeSize())
 				err = joinTx.BtcEncode(buffTx1, 0)
 				if err != nil {
-					log.Errorf("Error when BtcEncode %v", err)
-					msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, []byte{0x0})
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, buffTx1.Bytes())
 				if err := ws.WriteMessage(websocket.BinaryMessage, msg.ToBytes()); err != nil {
-					log.Errorf("error WriteMessage: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 			case messages.S_TX_PUBLISH_RESULT:
 				// Will use transaction to pruchase ticket with peer's output index.
@@ -1713,8 +1683,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buffTx := bytes.NewBuffer(message.Data)
 				err := tx.BtcDecode(buffTx, 0)
 				if err != nil {
-					log.Errorf("Error when BtcDecode %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 				log.Info("Received published transaction, will use to purchase tickets")
 				return purchaseFn(&tx, req.numTickets, outputIndex)
@@ -1733,8 +1702,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		var splitOuts []*wire.TxOut
 		pkScript, err := txscript.PayToAddrScript(splitTxAddr)
 		if err != nil {
-			log.Errorf("cannot create txout script: %s", err)
-			return nil, err
+			return nil, errors.E(op, err)
 		}
 		for i := 0; i < req.numTickets; i++ {
 			splitOuts = append(splitOuts, wire.NewTxOut(int64(neededPerTicket), pkScript))
@@ -1769,8 +1737,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf,
 					n, false, txFeeIncrement)
 				if err != nil {
-					log.Errorf("failed to send split transaction: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
@@ -1793,8 +1760,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf,
 					n, false, txFeeIncrement)
 				if err != nil {
-					log.Errorf("failed to send split transaction: %v", err)
-					return nil, err
+					return nil, errors.E(op, err)
 				}
 
 				return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
@@ -1820,8 +1786,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf,
 						n, false, txFeeIncrement)
 					if err != nil {
-						log.Errorf("failed to send split transaction: %v", err)
-						return nil, err
+						return nil, errors.E(op, err)
 					}
 
 					return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
@@ -1845,8 +1810,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf,
 						n, false, txFeeIncrement)
 					if err != nil {
-						log.Errorf("failed to send split transaction: %v", err)
-						return nil, err
+						return nil, errors.E(op, err)
 					}
 
 					return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
@@ -1894,14 +1858,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			log.Info("Will publish the transaction")
 			err = w.publishTx(signedTx, changeSourceFuncs, w.networkBackend)
 			if err != nil {
-				log.Errorf("Error when publish join splittx %v", err)
 				_, err := req.dcrTxClient.TxService.PublishResult(nil, sesID, joinId)
 				return ticketHashes, err
 			}
 
 			_, err := req.dcrTxClient.TxService.PublishResult(signedTx, sesID, joinId)
 			if err != nil {
-				log.Errorf("Error when publish join splittx %v", err)
 				return ticketHashes, err
 			}
 			publishedTx = signedTx
@@ -1924,7 +1886,6 @@ func (w *Wallet) processTxRecordAndPublish(tx *wire.MsgTx, n NetworkBackend) err
 	// Create transaction record
 	rec, err := udb.NewTxRecordFromMsgTx(tx, time.Now())
 	if err != nil {
-		log.Error("processTxRecordAndPublish.NewTxRecordFromMsgTx error ", err)
 		return err
 	}
 
@@ -2174,46 +2135,6 @@ func (w *Wallet) signP2PKHMsgTx(msgtx *wire.MsgTx, prevOutputs []udb.Credit, add
 
 	return nil
 }
-
-// signMsgTx sets the SignatureScript for every item in msgtx.TxIn.
-// It must be called every time a msgtx is changed.
-// Only P2PKH outputs are supported at this point.
-//func signMsgTx(msgtx *wire.MsgTx, prevOutputs []udb.Credit,
-//	mgr *udb.Manager, addrmgrNs walletdb.ReadBucket, chainParams *chaincfg.Params) error {
-//	if len(prevOutputs) != len(msgtx.TxIn) {
-//		return fmt.Errorf(
-//			"Number of prevOutputs (%d) does not match number of tx inputs (%d)",
-//			len(prevOutputs), len(msgtx.TxIn))
-//	}
-//	for i, output := range prevOutputs {
-//		// Errors don't matter here, as we only consider the
-//		// case where len(addrs) == 1.
-//		_, addrs, _, _ := txscript.ExtractPkScriptAddrs(
-//			txscript.DefaultScriptVersion, output.PkScript, chainParams)
-//		if len(addrs) != 1 {
-//			continue
-//		}
-//		apkh, ok := addrs[0].(*dcrutil.AddressPubKeyHash)
-//		if !ok {
-//			return ErrUnsupportedTransactionType
-//		}
-
-//		privKey, done, err := mgr.PrivateKey(addrmgrNs, apkh)
-//		if err != nil {
-//			return err
-//		}
-//		defer done()
-
-//		sigscript, err := txscript.SignatureScript(msgtx, i, output.PkScript,
-//			txscript.SigHashAll, privKey, true)
-//		if err != nil {
-//			return fmt.Errorf("cannot create sigscript: %s", err)
-//		}
-//		msgtx.TxIn[i].SignatureScript = sigscript
-//	}
-
-//	return nil
-//}
 
 // signVoteOrRevocation signs a vote or revocation, specified by the isVote
 // argument.  This signs the transaction by modifying tx's input scripts.
