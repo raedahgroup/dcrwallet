@@ -20,9 +20,9 @@ type (
 
 	Client struct {
 		sync.Mutex
-		Cfg  *Config
-		conn *grpc.ClientConn
-		*service.TxService
+		Cfg        *Config
+		conn       *grpc.ClientConn
+		TxService  *service.TxService
 		IsShutdown bool
 	}
 )

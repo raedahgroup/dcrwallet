@@ -1784,7 +1784,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		}()
 
 		// Call join split tx request with timeout.
-		tx, sesID, inputIds, outputIds, joinId, err := req.dcrTxClient.JoinSplitTx(splitTx.Tx, req.dcrTxClient.Cfg.Timeout)
+		tx, sesID, inputIds, outputIds, joinId, err := req.dcrTxClient.TxService.JoinSplitTx(splitTx.Tx, req.dcrTxClient.Cfg.Timeout)
 		log.Debugf("JoinSessionId %v", joinId)
 		if err != nil {
 			if !req.dcrTxClient.IsShutdown {
@@ -1870,7 +1870,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		}
 
 		// Submit signed input to server.
-		signedTx, publisher, err := req.dcrTxClient.SubmitSignedTx(tx, sesID, joinId)
+		signedTx, publisher, err := req.dcrTxClient.TxService.SubmitSignedTx(tx, sesID, joinId)
 		if err != nil {
 
 			if !req.dcrTxClient.IsShutdown {
@@ -1895,11 +1895,11 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			err = w.publishTx(signedTx, changeSourceFuncs, w.networkBackend)
 			if err != nil {
 				log.Errorf("Error when publish join splittx %v", err)
-				_, err := req.dcrTxClient.PublishResult(nil, sesID, joinId)
+				_, err := req.dcrTxClient.TxService.PublishResult(nil, sesID, joinId)
 				return ticketHashes, err
 			}
 
-			_, err := req.dcrTxClient.PublishResult(signedTx, sesID, joinId)
+			_, err := req.dcrTxClient.TxService.PublishResult(signedTx, sesID, joinId)
 			if err != nil {
 				log.Errorf("Error when publish join splittx %v", err)
 				return ticketHashes, err
@@ -1907,7 +1907,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			publishedTx = signedTx
 			log.Info("Published and sent the joined transaction %v to server", publishedTx.TxHash().String())
 		} else {
-			publishedTx, err = req.dcrTxClient.PublishResult(nil, sesID, joinId)
+			publishedTx, err = req.dcrTxClient.TxService.PublishResult(nil, sesID, joinId)
 			if err != nil {
 				return ticketHashes, err
 			}

@@ -8,12 +8,11 @@ import (
 	"github.com/tmthrgd/go-rand"
 )
 
-// RandBytes returns random [rndsize]byte slice with provided seed
+// RandBytes returns random [rndsize]byte slice with provided seed and size
 // based on chacha20. The seed size must be 32.
 func RandBytes(seed []byte, rndsize int) ([]byte, error) {
 	r, err := rand.New(seed[:])
 	if err != nil {
-		fmt.Println("error creates chacharng bytes with seed")
 		return nil, err
 	}
 
@@ -22,19 +21,18 @@ func RandBytes(seed []byte, rndsize int) ([]byte, error) {
 	n, err := r.Read(ret)
 
 	if n != rndsize {
-		return nil, errors.New("error returns wrong size of bytes")
+		return nil, errors.New(fmt.Sprintf("Wrong number of bytes read. Expected [%d] bytes, got [%d] bytes.", rndsize, n))
 	}
 
 	return ret, nil
 
 }
 
-// NewReaderBytes generates random [rndsize]byte slice with provided seed and reader for next random
-// based on chacha20. The seed size must be 32.
+// NewReaderBytes generates random [rndsize]byte slice with provided seed and size.
+// Also returns reader for next random based on chacha20. The seed size must be 32.
 func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte, error) {
 	r, err := NewRandReader(seed[:])
 	if err != nil {
-		fmt.Println("error creates chacharng bytes with seed")
 		return nil, nil, err
 	}
 
@@ -43,7 +41,7 @@ func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte, error) {
 	n, _ := r.Read(ret)
 
 	if n != rndsize {
-		return nil, nil, errors.New("error returns wrong size of bytes")
+		return nil, nil, errors.New(fmt.Sprintf("wrong number of bytes read. Expected [%d] bytes, got [%d] bytes.", rndsize, n))
 	}
 
 	return r, ret, nil
@@ -54,7 +52,6 @@ func NewReaderBytes(seed []byte, rndsize int) (io.Reader, []byte, error) {
 func NewRandReader(seed []byte) (io.Reader, error) {
 	r, err := rand.New(seed[:])
 	if err != nil {
-		fmt.Println("error new chacharng with seed")
 		return nil, err
 	}
 
