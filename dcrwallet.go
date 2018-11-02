@@ -145,9 +145,9 @@ func run(ctx context.Context) error {
 	if done(ctx) {
 		return ctx.Err()
 	}
-	//Init config for dcrTxClient
-	//dcrTxClient will be set for wallet later
-	var dcrTxClient *dcrtxclient.Client
+	// Init config for dcrTxClient.
+	// dcrTxClient will be set for wallet later
+	dcrTxClient := &dcrtxclient.Client{}
 	if cfg.DcrtxClientConfig != nil {
 		dcrTxClient.Cfg = cfg.DcrtxClientConfig
 	}

@@ -1230,7 +1230,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 	if req.dcrTxClient.Cfg.Enable {
 		var splitOuts []*wire.TxOut
 
-		//create slice of pkscripts
+		// Create slice of pkscripts.
 		pkScripts := make([][]byte, req.numTickets)
 
 		for i := 0; i < req.numTickets; i++ {
