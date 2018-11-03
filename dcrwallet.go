@@ -298,8 +298,8 @@ func run(ctx context.Context) error {
 			}
 		}()
 		defer func() {
-			//set IsShutdown to signal dcrtxclient that there is a shutdown request
-			//then disconnect
+			// Set IsShutdown to signal dcrtxclient that there is a shutdown request
+			// then disconnect
 			if dcrTxClient != nil {
 				dcrTxClient.IsShutdown = true
 				dcrTxClient.Disconnect()

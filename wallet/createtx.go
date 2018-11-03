@@ -1277,13 +1277,24 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		// Connect to dcrtxmatcher server via websocket.
 		// In case dcrtxmacher is not available, we will purchase locally as usual
 		dialer := websocket.Dialer{}
-		ws, _, err := dialer.Dial("ws://"+req.dcrTxClient.Cfg.Address+"/ws", http.Header{})
+		ws, _, err := dialer.Dial(fmt.Sprintf("ws://%s/ws", req.dcrTxClient.Cfg.Address), http.Header{})
 		if err != nil {
-			log.Errorf("Connecting Error: %v", err)
-			// Will purchase locally
-
+			w.dcrTxClient.Ws = nil
+			log.Infof("Can not connect to dcrtxmatcher server: %v", err)
+			// Do solo purchase
+			if !req.dcrTxClient.IsShutdown {
+				log.Infof("Will do solo purchase ticket")
+				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
+				if err != nil {
+					return nil, errors.E(op, err)
+				}
+				return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
+			}
+			return nil, err
 		}
-		log.Info("Connected to dcrtxmatcher server for joining transaction!")
+		// Set new websocket to dcrTxClient of wallet.
+		w.dcrTxClient.Ws = ws
+		log.Info("Connected to dcrtxmatcher server for joining transaction")
 		defer ws.Close()
 
 		// Generate public/private keypair using Elliptic Curve Diffe Huffman
@@ -1357,6 +1368,14 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				keyex := &pb.KeyExchangeRes{}
 				err := proto.Unmarshal(message.Data, keyex)
 				if err != nil {
+					if !req.dcrTxClient.IsShutdown {
+						log.Infof("Will do solo purchase ticket")
+						localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
+						if err != nil {
+							return nil, errors.E(op, err)
+						}
+						return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
+					}
 					return nil, errors.E(op, err)
 				}
 				log.Debug("Generate sharedkey with each peer")
@@ -1371,11 +1390,30 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 						log.Errorf("error GenerateSharedSecret: %v", err)
 						return nil, err
 					}
+					//Fix issue sharedKey is less than 32 byte
+					if len(sharedKey) < 32 {
+						for i := 0; i < 32-len(sharedKey); i++ {
+							sharedKey = append(sharedKey, 0x00)
+						}
+					}
+					if len(sharedKey) > 32 {
+						sharedKey = sharedKey[0:31]
+					}
+
 					// Generate random byte with shared key and random size is 12.
 					// Choose 12 because with bigger random size will cause the power sum
 					// with padding random bytes overflow max value of prime finite field (1<<127)
 					dcexpRng, err := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
 					if err != nil {
+						// Do solo purchase
+						if !req.dcrTxClient.IsShutdown {
+							log.Infof("Will do solo purchase ticket")
+							localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
+							if err != nil {
+								return nil, errors.E(op, err)
+							}
+							return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
+						}
 						return nil, errors.E(op, err)
 					}
 					dcexpRng = append([]byte{0, 0, 0, 0}, dcexpRng...)
@@ -1420,9 +1458,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				// Padding with random number generated with secret key seed
+				// Padding with random number generated with secret key seed.
 				for j := 0; j < int(numMsg); j++ {
-					// Padding with other peers
+					// Padding with other peers.
 					for _, p := range peers {
 						if PeerId > p.Id {
 							myDcexp[j] = myDcexp[j].Add(p.GetDcexpField())
@@ -1791,8 +1829,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					log.Errorf("error WriteMessage: %v", err)
 					return nil, err
 				}
-
-				log.Debug("Sent C_KEY_EXCHANGE to server")
 
 			}
 		}

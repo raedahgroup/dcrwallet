@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/decred/dcrwallet/dcrtxclient/service"
+	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 )
 
@@ -23,6 +24,7 @@ type (
 		Cfg        *Config
 		conn       *grpc.ClientConn
 		TxService  *service.TxService
+		Ws         *websocket.Conn
 		IsShutdown bool
 	}
 )
@@ -74,10 +76,13 @@ func (c *Client) Connect() (*grpc.ClientConn, error) {
 func (c *Client) Disconnect() error {
 	if c.isConnected() {
 		c.conn.Close()
-		log.Info("dcrTxClient disconnected")
-		return nil
+		log.Info("DcrTxClient grpc disconnected")
 	}
-	return ErrNotConnected
+	if c.Ws != nil {
+		c.Ws.Close()
+		log.Info("DcrTxClient websocket disconnected")
+	}
+	return nil
 }
 
 // isConnected checks if client is connected to server
