@@ -45,7 +45,7 @@ import (
 	"github.com/decred/dcrwallet/dcrtxclient/messages"
 	"github.com/decred/dcrwallet/dcrtxclient/ripemd128"
 	"github.com/decred/dcrwallet/dcrtxclient/util"
-	"github.com/wsddn/go-ecdh"
+	"github.com/huyntsgs/go-ecdh"
 )
 
 // --------------------------------------------------------------------------------
@@ -1305,8 +1305,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		}
 
 		pkbytes := ecp256.Marshal(pk)
-
-		//vkbytes := ecp256.Marshal(vk)
+		vkbytes := ecp256.MarshalPrivateKey(vk)
 		var numMsg uint32 = 0
 		var allMsgBytes [][]byte
 		var allMsgHashes []field.Uint128
@@ -1323,7 +1322,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 			_, msg, err := ws.ReadMessage()
 			if err != nil {
-				return nil, errors.E(op, err)
+				log.Infof("Can not connect to txmatcher server, do solo purchase ticket")
+				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
+				if err != nil {
+					return nil, errors.E(op, err)
+				}
+				return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
 			}
 
 			message, err := messages.ParseMessage(msg)
@@ -1381,24 +1385,27 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				log.Debug("Generate sharedkey with each peer")
 				log.Debug("Uses shared key as seed to generate padding bytes for dc-net exponential and dc-net xor")
 
-				// We will create peer random bytes for dc-net exponential and dc-net xor
+				// Create peer's random bytes for dc-net exponential and dc-net xor
 				for _, peer := range keyex.Peers {
+					if peer.PeerId == PeerId {
+						numMsg += peer.NumMsg
+						continue
+					}
 					peerPk, _ := ecp256.Unmarshal(peer.Pk)
-					// Will generate shared key with other peer from private key and other peer public key
-					sharedKey, err := ecp256.GenerateSharedSecret(vk, peerPk)
+					// Generate shared key with other peer from peer's private key and other peer's public key
+					sharedKey, err := ecp256.GenSharedSecret32(vk, peerPk)
 					if err != nil {
-						log.Errorf("error GenerateSharedSecret: %v", err)
+						log.Errorf("Can not generate shared secret key: %v", err)
 						return nil, err
 					}
-					//Fix issue sharedKey is less than 32 byte
-					if len(sharedKey) < 32 {
-						for i := 0; i < 32-len(sharedKey); i++ {
-							sharedKey = append(sharedKey, 0x00)
-						}
-					}
-					if len(sharedKey) > 32 {
-						sharedKey = sharedKey[0:31]
-					}
+
+					log.Debugf("Share key %x with peer %d", sharedKey, peer.PeerId)
+
+					//TEST ONLY
+					//					sharedKey[0] = 0x00
+					//					sharedKey[5] = 0x00
+					//					sharedKey[10] = 0x00
+					//					sharedKey[11] = 0x00
 
 					// Generate random byte with shared key and random size is 12.
 					// Choose 12 because with bigger random size will cause the power sum
@@ -1436,8 +1443,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				// Create dc-net exponential vector with size is total number message of all peers in join session.
-				// We choose 127 instead of 128 because as the same reason choosing 12 byte of random byte size in dc-net exponential
+				// Create dc-net exponential vector with size is total number
+				// message of all peers in join session.
+				// We choose 127 instead of 128 as the same reason
+				// choosing 12 byte of random byte size in dc-net exponential.
 				myDcexp := make([]field.Field, numMsg)
 				for _, msg := range pkScripts {
 					md := ripemd128.New()
@@ -1446,16 +1455,20 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 						return nil, errors.E(op, err)
 					}
 
-					pkscripthash := md.Sum127(nil)
-					myMsgsHash = append(myMsgsHash, pkscripthash)
+					pkScriptHash := md.Sum127(nil)
+					log.Debugf("pkScriptHash %x", pkScriptHash)
+					myMsgsHash = append(myMsgsHash, pkScriptHash)
+					ff := field.NewFF(field.FromBytes(pkScriptHash))
 
-					ff := field.NewFF(field.FromBytes(pkscripthash))
-
-					// With N message we will create vector with size N,
+					// With N message we create vector with size N,
 					// create power of each message hash and sum all messages with the same power i
 					for i := 0; i < int(numMsg); i++ {
 						myDcexp[i] = myDcexp[i].Add(ff.Exp(uint64(i + 1)))
 					}
+				}
+
+				for i := 0; i < int(numMsg); i++ {
+					log.Debugf("Exponential vector bf padding %x", myDcexp[i].N.GetBytes())
 				}
 
 				// Padding with random number generated with secret key seed.
@@ -1524,15 +1537,36 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return allMsgHashes[i].Compare(allMsgHashes[j]) < 0
 				})
 
+				//				for i, msg := range allMsgHashes {
+				//					log.Debugf("allMsgHashes %x, index: %d", msg.GetBytes(), i)
+				//				}
+
 				// Find my messages index in messages hash.
 				slotReserveds := make([]int, len(myMsgsHash))
+				slotFound := 0
 				for j := 0; j < len(myMsgsHash); j++ {
 					for i := 0; i < int(allMsgs.Len); i++ {
 						if bytes.Equal(myMsgsHash[j], allMsgHashes[i].GetBytes()) {
 							slotReserveds[j] = i
+							slotFound++
 						}
 					}
 				}
+				// Can not find enough slot messages returned from server.
+				if len(myMsgsHash) != slotFound {
+					log.Debugf("len(myMsgsHash) != slotFound")
+					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
+					data, err := proto.Marshal(msgNotFound)
+					if err != nil {
+						return nil, errors.E(op, err)
+					}
+					message := messages.NewMessage(messages.C_MESSAGE_NOT_FOUND, data)
+					if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
+						return nil, errors.E(op, err)
+					}
+					continue
+				}
+
 				log.Debugf("Find my pkscripts from all hashed messages returned from server. My slot reserved index %v", slotReserveds)
 
 				// After found slot index of pkscripts hash.
@@ -1563,6 +1597,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 
 				xorData := make([]byte, 0)
+				//TEST ONLY - modify dcxor vector
+				//				myDcXor[0][2] = 0x00
+				//				myDcXor[0][3] = 0x00
+				//				myDcXor[0][5] = 0x00
 				for _, dc := range myDcXor {
 					xorData = append(xorData, dc...)
 				}
@@ -1588,6 +1626,38 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				err := proto.Unmarshal(message.Data, dcxorRet)
 				if err != nil {
 					return nil, errors.E(op, err)
+				}
+
+				// TODO: Find messages from all messages returned from server.
+				//log.Debugf("len of dcxorRet.Msgs %d", len(dcxorRet.Msgs))
+				solvedMsgs := make([][]byte, 0)
+				for i := 0; i < len(dcxorRet.Msgs)/messages.PkScriptSize; i++ {
+					solvedMsg := dcxorRet.Msgs[i*messages.PkScriptSize : (i+1)*messages.PkScriptSize]
+					solvedMsgs = append(solvedMsgs, solvedMsg)
+				}
+				slotFound := 0
+				for _, msg := range pkScripts {
+					for _, solvedMsg := range solvedMsgs {
+						log.Debugf("solvedMsg %x", solvedMsg)
+						if bytes.Compare(msg, solvedMsg) == 0 {
+							slotFound++
+						}
+					}
+				}
+				//log.Debugf("len of solvedMsg %d", len(solvedMsgs))
+				//log.Debugf("slot found %d, allMsg number %d", slotFound, len(allMsgBytes))
+				if slotFound != len(pkScripts) {
+					log.Debugf("slotFound != len(pkScripts)")
+					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
+					data, err := proto.Marshal(msgNotFound)
+					if err != nil {
+						return nil, errors.E(op, err)
+					}
+					message := messages.NewMessage(messages.C_MESSAGE_NOT_FOUND, data)
+					if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
+						return nil, errors.E(op, err)
+					}
+					continue
 				}
 
 				buffTx := bytes.NewBuffer(nil)
@@ -1712,7 +1782,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(publishRet)
 				if err != nil {
-					log.Errorf("Error Marshal PublishResult %v", err)
+					log.Errorf("Can not marshal PublishResult %v", err)
 					msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, []byte{0x0})
 					return nil, err
 				}
@@ -1742,17 +1812,18 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return nil, err
 				}
 
-				log.Debug("mailicious peer ids ", mailiciousPeers.PeerIds)
-				log.Debug("new PeerId ", mailiciousPeers.PeerId)
-				log.Debug("new SessionId ", mailiciousPeers.SessionId)
+				log.Debug("Mailicious peer ids ", mailiciousPeers.PeerIds)
+				log.Debug("New PeerId ", mailiciousPeers.PeerId)
+				log.Debug("New SessionId ", mailiciousPeers.SessionId)
 
 				vk, pk, err = ecp256.GenerateKey(rand.Reader)
 				if err != nil {
-					log.Errorf("error ecdh GenerateKey: %v", err)
+					log.Errorf("Can not generate public/private key pair: %v", err)
 					return nil, err
 				}
 
 				pkbytes = ecp256.Marshal(pk)
+				vkbytes = ecp256.MarshalPrivateKey(vk)
 
 				// Start join session from beginning.
 				PeerId = mailiciousPeers.PeerId
@@ -1771,11 +1842,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					log.Errorf("error Unmarshal joinRes: %v", err)
 					return nil, err
 				}
-				// Reset peer's data from previous session
-				splitOuts = []*wire.TxOut{}
-				//create slice of pkscripts
-				pkScripts = make([][]byte, req.numTickets)
 
+				splitOuts = []*wire.TxOut{}
+				// Create slice of pkscripts
+				pkScripts = make([][]byte, req.numTickets)
 				for i := 0; i < req.numTickets; i++ {
 					splitTxAddr, err := w.NewInternalAddress(req.account, WithGapPolicyWrap())
 					if err != nil {
@@ -1795,26 +1865,25 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				if txFeeIncrement == 0 {
 					txFeeIncrement = w.RelayFee()
 				}
-
 				splitTx, changeSourceFuncs, err = w.txToOutputsSplitTx(splitOuts, req.account, req.minConf,
 					n, false, txFeeIncrement)
 				if err != nil {
 					return nil, errors.E(op, errors.Bug, errors.Errorf("split address %v", ""))
 				}
 
-				//remove all txout to perform dicemix output address, keep only change output
+				// Remove all txout to perform dicemix output address, keep only change output.
 				if len(splitTx.Tx.TxOut) > 1 {
 					splitTx.Tx.TxOut = []*wire.TxOut{splitTx.Tx.TxOut[len(splitTx.Tx.TxOut)-1]}
 				} else {
 					splitTx.Tx.TxOut = []*wire.TxOut{}
 				}
 
-				// build outputs index in case communicate with server fails
+				// Build outputs index in case communicate with server fails.
 				localOutputIndex = make([]int32, 0)
 				for i := 0; i < req.numTickets; i++ {
 					localOutputIndex = append(localOutputIndex, int32(i))
 				}
-
+				// Reset peer data for new join session
 				peers = []PeerData{}
 				numMsg = 0
 				allMsgBytes = [][]byte{}
@@ -1824,12 +1893,27 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				inputIndex = []int32{}
 				joinTx = wire.MsgTx{}
 
+				log.Debug("Sent C_KEY_EXCHANGE")
 				message := messages.NewMessage(messages.C_KEY_EXCHANGE, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("error WriteMessage: %v", err)
+					log.Errorf("Can not WriteMessage: %v", err)
 					return nil, err
 				}
 
+			case messages.S_REVEAL_SECRET:
+				rvSecret := &pb.RevealSecret{}
+				//TEST ONLY
+				//				vkbytes[0] = 0x00
+				//				vkbytes[4] = 0x00
+				rvSecret.Vk = vkbytes
+
+				data, _ := proto.Marshal(rvSecret)
+				message := messages.NewMessage(messages.C_REVEAL_SECRET, data)
+				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
+					log.Errorf("Can not WriteMessage: %v", err)
+					return nil, err
+				}
+				log.Infof("Sent verify key to server")
 			}
 		}
 

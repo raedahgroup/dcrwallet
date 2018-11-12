@@ -1,6 +1,7 @@
 package field
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -43,7 +44,18 @@ func TestMul(t *testing.T) {
 	}
 
 }
+func TestParseString(t *testing.T) {
 
+	s := "93f96f951647ccc0430870503b1e1f"
+	padding := fmt.Sprintf("%032s", s)
+	fmt.Println("padding ", padding)
+	n, err := Uint128FromString(padding)
+	if err != nil {
+		fmt.Println("error ", err)
+	}
+	fmt.Println("n string ", n.HexStr())
+
+}
 func TestAdd(t *testing.T) {
 
 	for i, _ := range testAddU128Data {

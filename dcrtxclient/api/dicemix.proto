@@ -45,8 +45,9 @@ message DcXorVector {
 	bytes vector = 3;
 }
 
-message DcXorVectorResult {
-	repeated uint32 peer_ids = 1;
+message DcXorVectorResult {	
+	uint32 len = 1;
+	repeated bytes msgs = 2;
 }
 
 message AllMessages {	
@@ -74,6 +75,17 @@ message MaliciousPeers {
 	repeated uint32 peer_ids = 1;
 	uint32 peer_id = 2;
 	uint32 session_id = 3;
+}
+
+message RevealSecret {
+	uint32 peer_id = 1;
+	bytes vk = 2;
+	uint32 round = 3;
+}
+
+message MsgNotFound {	
+	uint32 peer_id = 1;
+	bytes data = 2;	
 }
 
 

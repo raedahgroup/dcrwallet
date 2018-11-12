@@ -68,7 +68,6 @@ func (c *Client) Connect() (*grpc.ClientConn, error) {
 	}
 
 	return conn, nil
-
 }
 
 // Disconnect disconnects client from server

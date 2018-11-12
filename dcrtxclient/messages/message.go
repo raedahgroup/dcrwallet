@@ -10,27 +10,34 @@ import (
 )
 
 const (
-	C_JOIN_REQUEST      = 1
-	C_KEY_EXCHANGE      = 2
-	C_DC_EXP_VECTOR     = 3
-	C_DC_SIMPLE_VECTOR  = 4
-	C_DC_XOR_VECTOR     = 5
-	C_TX_INPUTS         = 6
-	C_TX_SIGN           = 7
-	C_TX_PUBLISH_RESULT = 8
+	C_JOIN_REQUEST       = 1
+	C_KEY_EXCHANGE       = 2
+	C_DC_EXP_VECTOR      = 3
+	C_DC_SIMPLE_VECTOR   = 4
+	C_DC_XOR_VECTOR      = 5
+	C_TX_INPUTS          = 6
+	C_TX_SIGN            = 7
+	C_TX_PUBLISH_RESULT  = 8
+	C_MESSAGE_NOT_FOUND  = 9
+	C_REVEAL_SECRET      = 10
+	C_MSG_HASH_NOT_FOUND = 11
+	C_MSG_NOT_FOUND      = 12
 )
 
 const (
-	S_JOIN_RESPONSE     = 100
-	S_KEY_EXCHANGE      = 101
-	S_HASHES_VECTOR     = 102
-	S_MIXED_TX          = 103
-	S_JOINED_TX         = 104
-	S_TX_SIGN           = 105
-	S_DC_EXP_VECTOR     = 106
-	S_DC_XOR_VECTOR     = 107
-	S_TX_PUBLISH_RESULT = 108
-	S_MALICIOUS_PEERS   = 109
+	S_JOIN_RESPONSE      = 100
+	S_KEY_EXCHANGE       = 101
+	S_HASHES_VECTOR      = 102
+	S_MIXED_TX           = 103
+	S_JOINED_TX          = 104
+	S_TX_SIGN            = 105
+	S_DC_EXP_VECTOR      = 106
+	S_DC_XOR_VECTOR      = 107
+	S_TX_PUBLISH_RESULT  = 108
+	S_MALICIOUS_PEERS    = 109
+	S_REVEAL_SECRET      = 110
+	S_MSG_HASH_NOT_FOUND = 111
+	S_MSG_NOT_FOUND      = 112
 )
 
 const (
