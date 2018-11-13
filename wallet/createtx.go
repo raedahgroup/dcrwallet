@@ -1399,7 +1399,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 						return nil, err
 					}
 
-					log.Debugf("Share key %x with peer %d", sharedKey, peer.PeerId)
+					//log.Debugf("Share key %x with peer %d", sharedKey, peer.PeerId)
 
 					//TEST ONLY
 					//					sharedKey[0] = 0x00
@@ -1414,7 +1414,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					if err != nil {
 						// Do solo purchase
 						if !req.dcrTxClient.IsShutdown {
-							log.Infof("Will do solo purchase ticket")
+							log.Infof("Can not connect to server, solo purchase ticket")
 							localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
 							if err != nil {
 								return nil, errors.E(op, err)
@@ -1465,10 +1465,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					for i := 0; i < int(numMsg); i++ {
 						myDcexp[i] = myDcexp[i].Add(ff.Exp(uint64(i + 1)))
 					}
-				}
-
-				for i := 0; i < int(numMsg); i++ {
-					log.Debugf("Exponential vector bf padding %x", myDcexp[i].N.GetBytes())
 				}
 
 				// Padding with random number generated with secret key seed.
@@ -1554,7 +1550,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				// Can not find enough slot messages returned from server.
 				if len(myMsgsHash) != slotFound {
-					log.Debugf("len(myMsgsHash) != slotFound")
+					log.Debugf("Can not find my pkScriptHash in returns list. Inform to server message not found.")
 					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
 					data, err := proto.Marshal(msgNotFound)
 					if err != nil {
@@ -1644,10 +1640,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 						}
 					}
 				}
-				//log.Debugf("len of solvedMsg %d", len(solvedMsgs))
-				//log.Debugf("slot found %d, allMsg number %d", slotFound, len(allMsgBytes))
+
 				if slotFound != len(pkScripts) {
-					log.Debugf("slotFound != len(pkScripts)")
+					log.Debugf("Can not find my pkScriptHash in returns list. Inform to server message not found.")
 					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
 					data, err := proto.Marshal(msgNotFound)
 					if err != nil {
@@ -1792,7 +1787,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return nil, errors.E(op, err)
 				}
 			case messages.S_TX_PUBLISH_RESULT:
-				// Will use transaction to pruchase ticket with peer's output index.
+				// Will use transaction to purchase ticket with peer's output index.
 				if len(message.Data) == 1 {
 					return nil, errors.New("error when publish joined transaction")
 				}
@@ -1893,7 +1888,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				inputIndex = []int32{}
 				joinTx = wire.MsgTx{}
 
-				log.Debug("Sent C_KEY_EXCHANGE")
 				message := messages.NewMessage(messages.C_KEY_EXCHANGE, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
 					log.Errorf("Can not WriteMessage: %v", err)
@@ -1906,7 +1900,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				//				vkbytes[0] = 0x00
 				//				vkbytes[4] = 0x00
 				rvSecret.Vk = vkbytes
-
 				data, _ := proto.Marshal(rvSecret)
 				message := messages.NewMessage(messages.C_REVEAL_SECRET, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
@@ -1916,7 +1909,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				log.Infof("Sent verify key to server")
 			}
 		}
-
 		return nil, nil
 
 	} else {

@@ -19,7 +19,7 @@ type (
 // Compare does comparing two uint128 numbers.
 // Returns 0: equal, 1: greater, -1: less.
 func (op Uint128) Compare(op2 Uint128) int {
-	if op.H > op.H {
+	if op.H > op2.H {
 		return 1
 	} else if op.H < op2.H {
 		return -1
