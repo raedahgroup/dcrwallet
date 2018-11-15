@@ -1211,10 +1211,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				return ticketHashes, err
 			}
 
-			//			err = w.processTxRecordAndPublish(ticket, n)
-			//			if err != nil {
-			//				return ticketHashes, err
-			//			}
+			err = w.processTxRecordAndPublish(ticket, n)
+			if err != nil {
+				return ticketHashes, err
+			}
 
 			ticketHash := ticket.TxHash()
 			ticketHashes = append(ticketHashes, &ticketHash)
