@@ -77,7 +77,7 @@ func TestInvalidSeedSize(t *testing.T) {
 
 	rnd, err := RandBytes(seed, 20)
 
-	if err != nil {
+	if err == nil {
 		t.Fail()
 	}
 

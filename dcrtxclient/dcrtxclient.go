@@ -50,7 +50,7 @@ func (c *Client) StartSession() error {
 	}
 
 	if !c.Cfg.Enable {
-		log.Info("Session aborted, the client is currently disabled.")
+		return ErrConfigDisable
 	}
 
 	return nil

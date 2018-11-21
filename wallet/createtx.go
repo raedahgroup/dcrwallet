@@ -345,9 +345,9 @@ func (w *Wallet) txToOutputsSplitTx(outputs []*wire.TxOut, account uint32, minco
 		// Randomize change position, if change exists, before signing.  This
 		// doesn't affect the serialize size, so the change amount will still be
 		// valid.
-		if atx.ChangeIndex >= 0 && randomizeChangeIdx {
-			atx.RandomizeChangePosition()
-		}
+		// if atx.ChangeIndex >= 0 && randomizeChangeIdx {
+		// 	atx.RandomizeChangePosition()
+		// }
 
 		return err
 	})
@@ -1246,7 +1246,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			splitOuts = append(splitOuts, wire.NewTxOut(int64(neededPerTicket), pkScripts[i]))
 			log.Debugf("Pkscript %x", pkScripts[i])
 		}
-
 		txFeeIncrement := req.txFee
 		if txFeeIncrement == 0 {
 			txFeeIncrement = w.RelayFee()
@@ -1255,10 +1254,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		splitTx, changeSourceFuncs, err := w.txToOutputsSplitTx(splitOuts, req.account, req.minConf,
 			n, false, txFeeIncrement)
 		if err != nil {
-			return nil, errors.E(op, errors.Bug, errors.Errorf("split address %v", ""))
+			return nil, errors.E(op, err)
 		}
 
-		// Remove all txout to perform dicemix output address, keep only change output
+		// Remove all txouts to perform dicemix output address, keep only change amount output.
 		if len(splitTx.Tx.TxOut) > 1 {
 			splitTx.Tx.TxOut = []*wire.TxOut{splitTx.Tx.TxOut[len(splitTx.Tx.TxOut)-1]}
 		} else {
@@ -1277,13 +1276,14 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		// Connect to dcrtxmatcher server via websocket.
 		// In case dcrtxmacher is not available, we will purchase locally as usual
 		dialer := websocket.Dialer{}
-		ws, _, err := dialer.Dial(fmt.Sprintf("ws://%s/ws", req.dcrTxClient.Cfg.Address), http.Header{})
+		wsUrl := fmt.Sprintf("ws://%s/ws", req.dcrTxClient.Cfg.Address)
+		ws, _, err := dialer.Dial(wsUrl, http.Header{})
 		if err != nil {
 			w.dcrTxClient.Ws = nil
 			log.Infof("Can not connect to dcrtxmatcher server: %v", err)
 			// Do solo purchase
 			if !req.dcrTxClient.IsShutdown {
-				log.Infof("Will do solo purchase ticket")
+				log.Infof("Solo purchase ticket")
 				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
 				if err != nil {
 					return nil, errors.E(op, err)
@@ -1292,6 +1292,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			}
 			return nil, err
 		}
+
 		// Set new websocket to dcrTxClient of wallet.
 		w.dcrTxClient.Ws = ws
 		log.Info("Connected to dcrtxmatcher server for joining transaction")
@@ -1311,28 +1312,29 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		var allMsgHashes []field.Uint128
 		myMsgsHash := make([][]byte, 0)
 
-		// Will need to record the input and output index of peer in joined transaction.
-		// Know input index to sign peer's transaction input.
-		// Know output index to purchase ticket.
+		// Need to record the input and output index of peer in joined transaction.
+		// Using input index to sign peer's transaction input.
+		// Using output index to purchase ticket.
 		var outputIndex, inputIndex []int32
 		var joinTx wire.MsgTx
+		soloPurchase := false
 
 		// Read websocket continuously for incoming message
+	LOOP:
 		for {
-
+			ws.SetReadDeadline(time.Now().Add(time.Minute * time.Duration(req.dcrTxClient.Cfg.Timeout)))
 			_, msg, err := ws.ReadMessage()
 			if err != nil {
-				log.Infof("Can not connect to txmatcher server, do solo purchase ticket")
-				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
-				if err != nil {
-					return nil, errors.E(op, err)
-				}
-				return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
+				log.Infof("Can not connect to txmatcher server, solo purchase ticket")
+				soloPurchase = true
+				break LOOP
 			}
 
 			message, err := messages.ParseMessage(msg)
 			if err != nil {
-				return nil, errors.E(op, err)
+				log.Infof("Can not parse message from server: %v", err)
+				soloPurchase = true
+				break LOOP
 			}
 
 			// We need to check the type of the message and having proper process
@@ -1340,10 +1342,14 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			case messages.S_JOIN_RESPONSE:
 				// Peer receives this message when server has received all join transaction request from all peers.
 				// Server will generate session id and peer id and send back data to every peers
+				// Stop timeout timer.
+				//timer.Stop()
 				joinRes := &pb.CoinJoinRes{}
 				err := proto.Unmarshal(message.Data, joinRes)
 				if err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not unmarshal message from server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				PeerId = joinRes.PeerId
@@ -1359,12 +1365,15 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(keyex)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				message := messages.NewMessage(messages.C_KEY_EXCHANGE, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send message to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 			case messages.S_KEY_EXCHANGE:
@@ -1372,15 +1381,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				keyex := &pb.KeyExchangeRes{}
 				err := proto.Unmarshal(message.Data, keyex)
 				if err != nil {
-					if !req.dcrTxClient.IsShutdown {
-						log.Infof("Will do solo purchase ticket")
-						localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
-						if err != nil {
-							return nil, errors.E(op, err)
-						}
-						return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
-					}
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Debug("Generate sharedkey with each peer")
 				log.Debug("Uses shared key as seed to generate padding bytes for dc-net exponential and dc-net xor")
@@ -1395,8 +1397,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					// Generate shared key with other peer from peer's private key and other peer's public key
 					sharedKey, err := ecp256.GenSharedSecret32(vk, peerPk)
 					if err != nil {
-						log.Errorf("Can not generate shared secret key: %v", err)
-						return nil, err
+						soloPurchase = true
+						break LOOP
 					}
 
 					//log.Debugf("Share key %x with peer %d", sharedKey, peer.PeerId)
@@ -1412,23 +1414,16 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					// with padding random bytes overflow max value of prime finite field (1<<127)
 					dcexpRng, err := chacharng.RandBytes(sharedKey, messages.ExpRandSize)
 					if err != nil {
-						// Do solo purchase
-						if !req.dcrTxClient.IsShutdown {
-							log.Infof("Can not connect to server, solo purchase ticket")
-							localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
-							if err != nil {
-								return nil, errors.E(op, err)
-							}
-							return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
-						}
-						return nil, errors.E(op, err)
+						soloPurchase = true
+						break LOOP
 					}
 					dcexpRng = append([]byte{0, 0, 0, 0}, dcexpRng...)
 
 					// For random byte of Xor vector, we get the same size of pkscript is 25 bytes
 					dcXorRng, err := chacharng.RandBytes(sharedKey, messages.PkScriptSize)
 					if err != nil {
-						return nil, err
+						soloPurchase = true
+						break LOOP
 					}
 					peers = append(peers, PeerData{Id: peer.PeerId, Pk: peer.Pk, NumMsg: peer.NumMsg, DcExp: dcexpRng,
 						DcXor: dcXorRng})
@@ -1452,7 +1447,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					md := ripemd128.New()
 					_, err = md.Write(msg)
 					if err != nil {
-						return nil, errors.E(op, err)
+						soloPurchase = true
+						break LOOP
 					}
 
 					pkScriptHash := md.Sum127(nil)
@@ -1470,13 +1466,15 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				// Padding with random number generated with secret key seed.
 				for j := 0; j < int(numMsg); j++ {
 					// Padding with other peers.
+					allPadding := field.Field{}
 					for _, p := range peers {
 						if PeerId > p.Id {
-							myDcexp[j] = myDcexp[j].Add(p.GetDcexpField())
+							allPadding = allPadding.Add(p.GetDcexpField())
 						} else if PeerId < p.Id {
-							myDcexp[j] = myDcexp[j].Sub(p.GetDcexpField())
+							allPadding = allPadding.Sub(p.GetDcexpField())
 						}
 					}
+					myDcexp[j] = myDcexp[j].Add(allPadding)
 				}
 
 				// Submit dc-net exponential vector of peer to server
@@ -1489,42 +1487,46 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				log.Debug("Sent dc-net exponential vector to server")
 
-				md := ripemd128.New()
-				_, err = md.Write(vector)
-				if err != nil {
-					return nil, errors.E(op, err)
-				}
+				// md := ripemd128.New()
+				// _, err = md.Write(vector)
+				// if err != nil {
+				// 	return nil, errors.E(op, err)
+				// }
 
-				commit := md.Sum(nil)
+				// commit := md.Sum(nil)
 				dcExpVector.Vector = vector
-				dcExpVector.Commit = commit
+				//dcExpVector.Commit = commit
 
 				data, err := proto.Marshal(dcExpVector)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				message := messages.NewMessage(messages.C_DC_EXP_VECTOR, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 			case messages.S_DC_EXP_VECTOR:
 				// After server received all peers exponential vector and resolved polynomial,
-				// server will sent back all resolved pkscripst hash.
-				// Each peer has to sort all pkscripts hash and sort to find their index of pkscripts hash in sorted list.
+				// server will sent back all pkscripts hash.
+				// Each peer has to sort all pkscripts hash and find their index of pkscripts hash in the sorted list.
 				log.Debug("Received all hash of pkscript from peers")
 				allMsgs := &pb.AllMessages{}
-
 				err := proto.Unmarshal(message.Data, allMsgs)
 				if err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not unmarshal data: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				allMsgBytes = make([][]byte, allMsgs.Len)
 				allMsgHashes = make([]field.Uint128, allMsgs.Len)
 				for i := 0; i < int(allMsgs.Len); i++ {
 					allMsgBytes[i] = allMsgs.Msgs[i*messages.PkScriptHashSize : (i+1)*messages.PkScriptHashSize]
-					log.Debugf("Pkscripts hash received from server %x", allMsgBytes[i])
+					//log.Debugf("Pkscripts hash received from server %x", allMsgBytes[i])
 					allMsgHashes[i] = field.FromBytes(allMsgBytes[i])
 				}
 
@@ -1550,15 +1552,18 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				}
 				// Can not find enough slot messages returned from server.
 				if len(myMsgsHash) != slotFound {
-					log.Debugf("Can not find my pkScriptHash in returns list. Inform to server message not found.")
+					log.Warnf("Can not find my pkScriptHash in returns list. Inform to server message not found.")
 					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
 					data, err := proto.Marshal(msgNotFound)
 					if err != nil {
-						return nil, errors.E(op, err)
+						soloPurchase = true
+						break LOOP
 					}
 					message := messages.NewMessage(messages.C_MESSAGE_NOT_FOUND, data)
 					if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-						return nil, errors.E(op, err)
+						log.Infof("Can not send data to server: %v", err)
+						soloPurchase = true
+						break LOOP
 					}
 					continue
 				}
@@ -1604,12 +1609,15 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				dcXor := &pb.DcXorVector{PeerId: PeerId, Vector: xorData, Len: numMsg}
 				data, err := proto.Marshal(dcXor)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 				// Submit dc-net xor vector to server
 				message := messages.NewMessage(messages.C_DC_XOR_VECTOR, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Debug("Sent dc-net xor vector to server")
 
@@ -1621,7 +1629,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				dcxorRet := &pb.DcXorVectorResult{}
 				err := proto.Unmarshal(message.Data, dcxorRet)
 				if err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not unmarshal data: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				// TODO: Find messages from all messages returned from server.
@@ -1634,7 +1644,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				slotFound := 0
 				for _, msg := range pkScripts {
 					for _, solvedMsg := range solvedMsgs {
-						log.Debugf("solvedMsg %x", solvedMsg)
+						//log.Debugf("solvedMsg %x", solvedMsg)
 						if bytes.Compare(msg, solvedMsg) == 0 {
 							slotFound++
 						}
@@ -1646,11 +1656,14 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					msgNotFound := &pb.MsgNotFound{PeerId: PeerId}
 					data, err := proto.Marshal(msgNotFound)
 					if err != nil {
-						return nil, errors.E(op, err)
+						soloPurchase = true
+						break LOOP
 					}
 					message := messages.NewMessage(messages.C_MESSAGE_NOT_FOUND, data)
 					if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-						return nil, errors.E(op, err)
+						log.Infof("Can not send data to server: %v", err)
+						soloPurchase = true
+						break LOOP
 					}
 					continue
 				}
@@ -1659,28 +1672,34 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buffTx.Grow(splitTx.Tx.SerializeSize())
 				err = splitTx.Tx.BtcEncode(buffTx, 0)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
-				log.Info("Will submit tx inputs and change amount to server")
+				log.Info("Submit transaction inputs and change amount to server")
 				txInputs := &pb.TxInputs{PeerId: PeerId, TicketPrice: int64(neededPerTicket), Txins: buffTx.Bytes()}
 				txInsData, err := proto.Marshal(txInputs)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				message := messages.NewMessage(messages.C_TX_INPUTS, txInsData)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Info("Sent transaction inputs and change amount")
 			case messages.S_JOINED_TX:
-				// With joined transaction returns from server.
-				// The key is finding correct peer's transaction input and output index
+				// With the joined transaction returns from server.
+				// The key is finding correctly peer's transaction input and output index
 				// and record for later use.
 				joinTxData := &pb.JoinTx{}
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not unmarshal data: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Info("Received joined tx. Will find my txin, txout index from joined tx and sign")
 				var joinTx wire.MsgTx
@@ -1688,9 +1707,11 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				err = joinTx.BtcDecode(buffTx, 0)
 				for _, msg := range pkScripts {
 					for i, txout := range joinTx.TxOut {
-						if bytes.Equal(txout.PkScript, msg) {
-							outputIndex = append(outputIndex, int32(i))
-							break
+						if i >= len(peers) {
+							if bytes.Equal(txout.PkScript, msg) {
+								outputIndex = append(outputIndex, int32(i))
+								break
+							}
 						}
 					}
 				}
@@ -1716,7 +1737,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					return err
 				})
 				if err != nil {
-					return nil, err
+					soloPurchase = true
+					break LOOP
 				}
 
 				// Encode signed transaction and submit to server.
@@ -1725,18 +1747,22 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buff.Grow(joinTx.SerializeSize())
 				err = joinTx.BtcEncode(buff, 0)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				signedTx.Tx = buff.Bytes()
 				signedTxData, err := proto.Marshal(signedTx)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				message := messages.NewMessage(messages.C_TX_SIGN, signedTxData)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Debug("Sent signed joined tx")
 
@@ -1747,20 +1773,25 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not unmarshal data: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				buffTx := bytes.NewReader(joinTxData.Tx)
 				err = joinTx.BtcDecode(buffTx, 0)
 				if err != nil {
-					return nil, errors.E(op, err)
+					//return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				log.Info("Will publish the transaction")
 				err = w.publishTx(&joinTx, changeSourceFuncs, w.networkBackend)
 				var msg *messages.Message
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Info("Published and sent the transaction to server", joinTx.TxHash().String())
 
@@ -1769,7 +1800,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buffTx1.Grow(joinTx.SerializeSize())
 				err = joinTx.BtcEncode(buffTx1, 0)
 				if err != nil {
-					return nil, errors.E(op, err)
+					soloPurchase = true
+					break LOOP
 				}
 
 				publishRet := &pb.PublishResult{}
@@ -1777,19 +1809,21 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(publishRet)
 				if err != nil {
-					log.Errorf("Can not marshal PublishResult %v", err)
-					msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, []byte{0x0})
-					return nil, err
+					soloPurchase = true
+					break LOOP
 				}
 
 				msg = messages.NewMessage(messages.C_TX_PUBLISH_RESULT, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, msg.ToBytes()); err != nil {
-					return nil, errors.E(op, err)
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 			case messages.S_TX_PUBLISH_RESULT:
 				// Will use transaction to purchase ticket with peer's output index.
 				if len(message.Data) == 1 {
-					return nil, errors.New("error when publish joined transaction")
+					soloPurchase = true
+					break LOOP
 				}
 
 				var tx wire.MsgTx
@@ -1814,7 +1848,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				vk, pk, err = ecp256.GenerateKey(rand.Reader)
 				if err != nil {
 					log.Errorf("Can not generate public/private key pair: %v", err)
-					return nil, err
+					soloPurchase = true
+					break LOOP
 				}
 
 				pkbytes = ecp256.Marshal(pk)
@@ -1834,8 +1869,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				data, err := proto.Marshal(keyex)
 				if err != nil {
-					log.Errorf("error Unmarshal joinRes: %v", err)
-					return nil, err
+					soloPurchase = true
+					break LOOP
 				}
 
 				splitOuts = []*wire.TxOut{}
@@ -1849,7 +1884,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					pkScripts[i], err = txscript.PayToAddrScript(splitTxAddr)
 					if err != nil {
 						log.Errorf("cannot create txout script: %s", err)
-						return nil, err
+						//return nil, err
+						soloPurchase = true
+						break LOOP
 					}
 
 					splitOuts = append(splitOuts, wire.NewTxOut(int64(neededPerTicket), pkScripts[i]))
@@ -1890,8 +1927,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 
 				message := messages.NewMessage(messages.C_KEY_EXCHANGE, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("Can not WriteMessage: %v", err)
-					return nil, err
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 
 			case messages.S_REVEAL_SECRET:
@@ -1903,11 +1941,19 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				data, _ := proto.Marshal(rvSecret)
 				message := messages.NewMessage(messages.C_REVEAL_SECRET, data)
 				if err := ws.WriteMessage(websocket.BinaryMessage, message.ToBytes()); err != nil {
-					log.Errorf("Can not WriteMessage: %v", err)
-					return nil, err
+					log.Infof("Can not send data to server: %v", err)
+					soloPurchase = true
+					break LOOP
 				}
 				log.Infof("Sent verify key to server")
 			}
+		}
+		if soloPurchase {
+			localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf, n, false, txFeeIncrement)
+			if err != nil {
+				return nil, errors.E(op, err)
+			}
+			return purchaseFn(localSplitTx.Tx, req.numTickets, localOutputIndex)
 		}
 		return nil, nil
 
@@ -1950,8 +1996,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		err = req.dcrTxClient.StartSession()
 		if err != nil {
 			if !req.dcrTxClient.IsShutdown {
-				log.Infof("Error %v in communication with dcrtxmatcher server", err)
-				log.Infof("Will buy ticket locally")
+				log.Infof("Can not connect to dcrtxmatcher: %v", err)
+				log.Infof("Solo purchase ticket")
 				localSplitTx, err := w.txToOutputsInternal(op, splitOuts, req.account, req.minConf,
 					n, false, txFeeIncrement)
 				if err != nil {

@@ -279,8 +279,6 @@ func Uint128FromString(s string) (Uint128, error) {
 		return Uint128{}, errors.Wrapf(err, "Could not decode %s as hex", s)
 	}
 
-	fmt.Printf("bytes Uint128 %x\n", bytes)
-
 	// Grow the byte slice if it's smaller than 16 bytes, by prepending 0s
 	if len(bytes) < 16 {
 		bytesCopy := make([]byte, 16)
