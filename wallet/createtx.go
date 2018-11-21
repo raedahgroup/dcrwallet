@@ -1224,6 +1224,15 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		return ticketHashes, nil
 	}
 
+	// Check number of tickets purchase. If this is greater than gapLimit setting in config file
+	// there will be duplicated in output addresses.
+	// So we limit to gapLimit only.
+	if req.numTickets > w.gapLimit-1 {
+		log.Warnf("You are trying to buy %d tickets greater than gap limit %d.", req.numTickets, w.gapLimit-1)
+		log.Warnf("This will cause duplicated in output addresses. So the purchase limits to below gapLimit is %d", w.gapLimit-1)
+		req.numTickets = w.gapLimit - 1
+	}
+
 	// We purchase ticket by coinshuffle++ method.
 	// If dcrTxClient is not enable, we purchase by coinjoin method.
 	// If server is not available, purchase ticket locally.
