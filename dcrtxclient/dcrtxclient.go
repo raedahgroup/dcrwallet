@@ -1,6 +1,7 @@
 package dcrtxclient
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/decred/dcrwallet/dcrtxclient/service"
@@ -26,8 +27,19 @@ type (
 		TxService  *service.TxService
 		Ws         *websocket.Conn
 		IsShutdown bool
+		TxHashes   []string
 	}
 )
+
+// ContainTxHash checks whether transaction hashes contains the given hash.
+func (c *Client) ContainTxHash(txHash string) bool {
+	for _, hash := range c.TxHashes {
+		if strings.Compare(hash, txHash) == 0 {
+			return true
+		}
+	}
+	return false
+}
 
 // startSession establishes a connection to the transaction matching server if
 // the client's configuration allows it.

@@ -1228,10 +1228,12 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 	// there will be duplicated in output addresses.
 	// So we limit to gapLimit only.
 	if req.numTickets > w.gapLimit-1 {
-		log.Warnf("You are trying to buy %d tickets greater than gap limit %d.", req.numTickets, w.gapLimit-1)
-		log.Warnf("This will cause duplicated in output addresses. So the purchase limits to below gapLimit is %d", w.gapLimit-1)
+		log.Warnf("You are trying to buy %d tickets. Gap limit is %d.", req.numTickets, w.gapLimit-1)
+		log.Warnf("This would cause address reuse so will limit your purchase to %d. You can adjust your gap limit config.", w.gapLimit-1)
 		req.numTickets = w.gapLimit - 1
 	}
+	//TEST ONLY
+	//req.numTickets = 1
 
 	// We purchase ticket by coinshuffle++ method.
 	// If dcrTxClient is not enable, we purchase by coinjoin method.
@@ -1258,19 +1260,6 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		txFeeIncrement := req.txFee
 		if txFeeIncrement == 0 {
 			txFeeIncrement = w.RelayFee()
-		}
-
-		splitTx, changeSourceFuncs, err := w.txToOutputsSplitTx(splitOuts, req.account, req.minConf,
-			n, false, txFeeIncrement)
-		if err != nil {
-			return nil, errors.E(op, err)
-		}
-
-		// Remove all txouts to perform dicemix output address, keep only change amount output.
-		if len(splitTx.Tx.TxOut) > 1 {
-			splitTx.Tx.TxOut = []*wire.TxOut{splitTx.Tx.TxOut[len(splitTx.Tx.TxOut)-1]}
-		} else {
-			splitTx.Tx.TxOut = []*wire.TxOut{}
 		}
 
 		// Build outputs index in case communicate with server fails
@@ -1302,6 +1291,19 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 			return nil, err
 		}
 
+		splitTx, changeSourceFuncs, err := w.txToOutputsSplitTx(splitOuts, req.account, req.minConf,
+			n, false, txFeeIncrement)
+		if err != nil {
+			return nil, errors.E(op, err)
+		}
+
+		// Remove all txouts to perform dicemix output address, keep only change amount output.
+		if len(splitTx.Tx.TxOut) > 1 {
+			splitTx.Tx.TxOut = []*wire.TxOut{splitTx.Tx.TxOut[len(splitTx.Tx.TxOut)-1]}
+		} else {
+			splitTx.Tx.TxOut = []*wire.TxOut{}
+		}
+
 		// Set new websocket to dcrTxClient of wallet.
 		w.dcrTxClient.Ws = ws
 		log.Info("Connected to dcrtxmatcher server for joining transaction")
@@ -1327,6 +1329,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 		var outputIndex, inputIndex []int32
 		var joinTx wire.MsgTx
 		soloPurchase := false
+		isPublisher := false
 
 		// Read websocket continuously for incoming message
 	LOOP:
@@ -1492,19 +1495,10 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				vector := make([]byte, 0)
 				for i := 0; i < int(numMsg); i++ {
 					vector = append(vector, myDcexp[i].N.GetBytes()...)
-					log.Debugf("Exponential vector %x", myDcexp[i].N.GetBytes())
+					//log.Debugf("Exponential vector %x", myDcexp[i].N.GetBytes())
 				}
 				log.Debug("Sent dc-net exponential vector to server")
-
-				// md := ripemd128.New()
-				// _, err = md.Write(vector)
-				// if err != nil {
-				// 	return nil, errors.E(op, err)
-				// }
-
-				// commit := md.Sum(nil)
 				dcExpVector.Vector = vector
-				//dcExpVector.Commit = commit
 
 				data, err := proto.Marshal(dcExpVector)
 				if err != nil {
@@ -1602,9 +1596,9 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					}
 				}
 
-				for _, item := range myDcXor {
-					log.Debugf("My dc-net Xor vector %x", item)
-				}
+				// for _, item := range myDcXor {
+				// 	log.Debugf("My dc-net Xor vector %x", item)
+				// }
 
 				xorData := make([]byte, 0)
 				//TEST ONLY - modify dcxor vector
@@ -1773,16 +1767,19 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					soloPurchase = true
 					break LOOP
 				}
-				log.Debug("Sent signed joined tx")
+
+				// TxHashes will be used to store published transaction from network.
+				// In next round will waiting for join transaction is confirmed before using to purchase ticket.
+				w.dcrTxClient.TxHashes = make([]string, 0)
+				log.Debug("Sent the signed transaction.")
 
 			case messages.S_TX_SIGN:
 				// With peer is selected to publish transaction
 				// then will be received this message data.
 				joinTxData := &pb.JoinTx{}
-
 				err := proto.Unmarshal(message.Data, joinTxData)
 				if err != nil {
-					log.Infof("Can not unmarshal data: %v", err)
+					log.Errorf("Can not unmarshal data S_TX_SIGN: %v. Size of message.Data: %d", err, len(message.Data))
 					soloPurchase = true
 					break LOOP
 				}
@@ -1790,7 +1787,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				buffTx := bytes.NewReader(joinTxData.Tx)
 				err = joinTx.BtcDecode(buffTx, 0)
 				if err != nil {
-					//return nil, errors.E(op, err)
+					log.Errorf("Can not decode transaction : %v", err)
 					soloPurchase = true
 					break LOOP
 				}
@@ -1799,6 +1796,7 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				err = w.publishTx(&joinTx, changeSourceFuncs, w.networkBackend)
 				var msg *messages.Message
 				if err != nil {
+					log.Errorf("Can not publish transaction %s : %v", joinTx.TxHash().String(), err)
 					soloPurchase = true
 					break LOOP
 				}
@@ -1828,6 +1826,8 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 					soloPurchase = true
 					break LOOP
 				}
+				isPublisher = true
+				w.dcrTxClient.TxHashes = nil
 			case messages.S_TX_PUBLISH_RESULT:
 				// Will use transaction to purchase ticket with peer's output index.
 				if len(message.Data) == 1 {
@@ -1841,7 +1841,33 @@ func (w *Wallet) purchaseTickets(op errors.Op, req purchaseTicketRequest) ([]*ch
 				if err != nil {
 					return nil, errors.E(op, err)
 				}
-				log.Info("Received published transaction, will use to purchase tickets")
+				if !isPublisher {
+					txHash := tx.TxHash().String()
+					timeout := make(chan struct{})
+					// Wait maximum 120 second for the published transaction.
+					go func() {
+						time.Sleep(120 * time.Second)
+						if _, ok := <-timeout; ok {
+							timeout <- struct{}{}
+						}
+					}()
+				LOOP_HASH:
+					for {
+						select {
+						case <-timeout:
+							break LOOP_HASH
+						case <-time.After(2 * time.Second):
+							if w.dcrTxClient.ContainTxHash(txHash) {
+								log.Infof("Transaction %s is confirmed", txHash)
+								break LOOP_HASH
+							}
+						}
+					}
+					close(timeout)
+					w.dcrTxClient.TxHashes = nil
+				}
+
+				log.Info("Received the published transaction, will use to purchase tickets")
 				return purchaseFn(&tx, req.numTickets, outputIndex)
 			case messages.S_MALICIOUS_PEERS:
 				mailiciousPeers := &pb.MaliciousPeers{}

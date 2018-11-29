@@ -344,6 +344,11 @@ func (w *Wallet) processTransactionRecord(dbtx walletdb.ReadWriteTx, rec *udb.Tx
 				"transaction already exists mined", &rec.Hash)
 			return nil
 		}
+
+		// Send unmined transaction to help client know whether joined transaction received or not.
+		if w.dcrTxClient.TxHashes != nil {			
+			w.dcrTxClient.TxHashes = append(w.dcrTxClient.TxHashes, rec.Hash.String())
+		}
 	} else {
 		err = w.TxStore.InsertMinedTx(txmgrNs, addrmgrNs, rec, &blockMeta.Hash)
 	}
