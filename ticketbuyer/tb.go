@@ -6,9 +6,12 @@ package ticketbuyer
 
 import (
 	"context"
+	"math"
+	"math/rand"
 	"net"
 	"runtime/trace"
 	"sync"
+	"time"
 
 	"decred.org/dcrwallet/errors"
 	"decred.org/dcrwallet/wallet"
@@ -41,7 +44,7 @@ type Config struct {
 	PoolFees float64
 
 	// Limit maximum number of purchased tickets per block
-	Limit int
+	Limit float64
 
 	// CSPP-related options
 	CSPPServer         string
@@ -244,20 +247,34 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	if err != nil {
 		return err
 	}
-	buy := int(spendable / sdiff)
-	if buy == 0 {
+
+	buy := int(math.Floor(limit))
+	extraTicketChance := math.Mod(limit, 1)
+	if extraTicketChance > 0 {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		randomNumber := r.Float64()
+		if extraTicketChance >= randomNumber {
+			buy++
+			log.Infof("%.4f >= %.4f(random), will buy %d", extraTicketChance, randomNumber, buy)
+		} else {
+			log.Infof("%.4f < %.4f(random), will buy %d", extraTicketChance, randomNumber, buy)
+		}
+	}
+
+	maxTicketsBuyable := int(spendable / sdiff)
+	if maxTicketsBuyable == 0 {
 		log.Debugf("Skipping purchase: low available balance")
 		return nil
+	} else if buy > maxTicketsBuyable {
+		buy = maxTicketsBuyable
 	}
+
 	if max := int(w.ChainParams().MaxFreshStakePerBlock); buy > max {
 		buy = max
 	}
-	if limit > 0 && buy > limit {
-		buy = limit
-	}
 
-	tix, err := w.PurchaseTickets(ctx, n, &wallet.PurchaseTicketsRequest{
-		Count:         buy,
+	req := &wallet.PurchaseTicketsRequest{
+		Count:         1,
 		SourceAccount: account,
 		VotingAddress: votingAddr,
 		MinConf:       minconf,
@@ -275,13 +292,19 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 		// VSPs
 		VSPAddress: poolFeeAddr,
 		VSPFees:    poolFees,
-	})
-	if tix != nil {
-		for _, hash := range tix.TicketHashes {
-			log.Infof("Purchased ticket %v at stake difficulty %v", hash, sdiff)
-		}
 	}
-	return err
+
+	for i := 0; i < buy; i++ {
+		tix, err := w.PurchaseTickets(ctx, n, req)
+		if tix != nil {
+			for _, hash := range tix.TicketHashes {
+				log.Infof("Purchased ticket %v at stake difficulty %v", hash, sdiff)
+			}
+		}
+		return err
+	}
+
+	return nil
 }
 
 // AccessConfig runs f with the current config passed as a parameter.  The
