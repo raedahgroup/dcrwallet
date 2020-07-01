@@ -302,7 +302,7 @@ func run(ctx context.Context) error {
 				c.Maintain = cfg.TBOpts.BalanceToMaintainAbsolute.Amount
 				c.VotingAddr = votingAddr
 				c.PoolFeeAddr = poolFeeAddr
-				c.Limit = int(cfg.TBOpts.Limit)
+				c.Limit = cfg.TBOpts.Limit
 				c.VotingAccount = votingAccount
 				c.CSPPServer = cfg.CSPPServer
 				c.DialCSPPServer = cfg.dialCSPPServer

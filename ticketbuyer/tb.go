@@ -6,9 +6,12 @@ package ticketbuyer
 
 import (
 	"context"
+	"math"
+	"math/rand"
 	"net"
 	"runtime/trace"
 	"sync"
+	"time"
 
 	"github.com/decred/dcrd/dcrutil/v2"
 	"github.com/decred/dcrd/wire"
@@ -41,7 +44,7 @@ type Config struct {
 	PoolFees float64
 
 	// Limit maximum number of purchased tickets per block
-	Limit int
+	Limit float64
 
 	// CSPP-related options
 	CSPPServer         string
@@ -244,16 +247,30 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	if err != nil {
 		return err
 	}
-	buy := int(spendable / sdiff)
-	if buy == 0 {
+
+	buy := int(math.Floor(limit))
+	extraTicketChance := math.Mod(limit, 1)
+	if extraTicketChance > 0 {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		randomNumber := r.Float64()
+		if extraTicketChance >= randomNumber {
+			buy++
+			log.Infof("%.4f >= %.4f(random), will buy %d", extraTicketChance, randomNumber, buy)
+		} else {
+			log.Infof("%.4f < %.4f(random), will buy %d", extraTicketChance, randomNumber, buy)
+		}
+	}
+
+	maxTicketsBuyable := int(spendable / sdiff)
+	if maxTicketsBuyable == 0 {
 		log.Debugf("Skipping purchase: low available balance")
 		return nil
+	} else if buy > maxTicketsBuyable {
+		buy = maxTicketsBuyable
 	}
+
 	if max := int(w.ChainParams().MaxFreshStakePerBlock); buy > max {
 		buy = max
-	}
-	if limit > 0 && buy > limit {
-		buy = limit
 	}
 
 	if poolFeeAddr != nil {
@@ -261,8 +278,9 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 		log.Errorf("Stakepool ticket buying is not yet implemented on this branch")
 		return nil
 	}
-	tix, err := w.PurchaseTicketsContext(ctx, n, &wallet.PurchaseTicketsRequest{
-		Count:         buy,
+
+	req := &wallet.PurchaseTicketsRequest{
+		Count:         1,
 		SourceAccount: account,
 		VotingAddress: votingAddr,
 		MinConf:       minconf,
@@ -276,17 +294,25 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 		MixedAccountBranch: mixedBranch,
 		MixedSplitAccount:  splitAccount,
 		ChangeAccount:      changeAccount,
-	})
-	for _, hash := range tix {
-		log.Infof("Purchased ticket %v at stake difficulty %v", hash, sdiff)
 	}
-	if err != nil && !errors.Is(errors.InsufficientBalance, err) {
-		// Invalid passphrase errors must be returned so Run exits.
-		if errors.Is(err, errors.Passphrase) {
-			return err
+
+	for i := 0; i < buy; i++ {
+		tix, err := w.PurchaseTicketsContext(ctx, n, req)
+		if tix != nil {
+			for _, hash := range tix {
+				log.Infof("Purchased ticket %v at stake difficulty %v", hash, sdiff)
+			}
 		}
-		log.Errorf("One or more tickets could not be purchased: %v", err)
+		if err != nil && !errors.Is(errors.InsufficientBalance, err) {
+			// Invalid passphrase errors must be returned so Run exits.
+			if errors.Is(err, errors.Passphrase) {
+				return err
+			}
+			log.Errorf("One or more tickets could not be purchased: %v", err)
+		}
+		return err
 	}
+
 	return nil
 }
 

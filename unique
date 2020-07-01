@@ -1,0 +1,52 @@
+// uniqueInputSource wraps an InputSource to pick unique UTXOs.
+// This involves reading all UTXOs from the underlying source into memory.
+func uniqueInputSource(source txauthor.InputSource) txauthor.InputSource {
+	log.Info("Called unique input source")
+	all, err := source(dcrutil.MaxAmount)
+	if err == nil {
+		shuffleUTXOs(all)
+	}
+
+	seenHashes := make(map[string]struct{})
+
+	var n int
+	var tot dcrutil.Amount
+	return func(target dcrutil.Amount) (*txauthor.InputDetail, error) {
+		log.Info("Target given a amount of: ", target)
+		if err != nil {
+			return nil, err
+		}
+		if all.Amount <= target {
+			return all, nil
+		}
+		for n < len(all.Inputs) {
+			log.Infof("n(%d) < %d", n, len(all.Inputs))
+			tot += dcrutil.Amount(all.Inputs[n].ValueIn)
+
+			hash := all.Inputs[n].PreviousOutPoint.Hash.String()
+
+			_, seenTxID := seenHashes[hash]
+			log.Infof("Seen %s : %s %v n: %d", hash, dcrutil.Amount(all.Inputs[n].ValueIn), seenTxID, n)
+			if seenTxID {
+				all.Inputs = append(all.Inputs[:n], all.Inputs[n+1:]...)
+				log.Infof("Deleted duplicate: %s, n: %d", hash, n)
+				continue
+			}
+
+			seenHashes[hash] = struct{}{}
+
+			n++
+			if tot >= target {
+				break
+			}
+		}
+
+		selected := &txauthor.InputDetail{
+			Amount:            tot,
+			Inputs:            all.Inputs[:n],
+			Scripts:           all.Scripts[:n],
+			RedeemScriptSizes: all.RedeemScriptSizes[:n],
+		}
+		return selected, nil
+	}
+}
